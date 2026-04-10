@@ -1,9 +1,0 @@
-D:\CSharp\WorkProject\PrinterManager\PrinterManager\obj\Debug\PrinterManager.csproj.AssemblyReference.cache
-D:\CSharp\WorkProject\PrinterManager\PrinterManager\obj\Debug\PrinterManager.csproj.CoreCompileInputs.cache
-D:\CSharp\WorkProject\PrinterManager\PrinterManager\bin\Debug\PrinterManager.exe
-D:\CSharp\WorkProject\PrinterManager\PrinterManager\bin\Debug\PrinterManager.pdb
-D:\CSharp\WorkProject\PrinterManager\PrinterManager\obj\Debug\PrinterManager.exe
-D:\CSharp\WorkProject\PrinterManager\PrinterManager\obj\Debug\PrinterManager.pdb
-D:\CSharp\WorkProject\PrinterManager\PrinterManager\obj\Debug\PrinterManager.UI.AddNetworkPrinterForm.resources
-D:\CSharp\WorkProject\PrinterManager\PrinterManager\obj\Debug\PrinterManager.csproj.GenerateResource.cache
-D:\CSharp\WorkProject\PrinterManager\PrinterManager\obj\Debug\PrinterManager.UI.MainForm.resources
