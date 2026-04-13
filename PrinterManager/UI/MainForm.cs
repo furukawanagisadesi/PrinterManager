@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
+using System.Threading;
 using System.Windows.Forms;
 using PrinterManager.Core;
 using PrinterManager.Models;
@@ -509,6 +511,162 @@ namespace PrinterManager.UI
             else if (tabControl.SelectedTab == tabDrivers)
                 RefreshDrivers();
             // 切到日志页不刷新
+        }
+
+        private void btnCleanPrinters_Click(object sender, EventArgs e)
+        {
+            var result = MessageBox.Show(
+                "确定要清空打印任务吗？\n\n清理将重启 Print Spooler 打印服务。",
+                "确认清空打印任务",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question
+            );
+
+            if (result != DialogResult.Yes)
+                return;
+
+            try
+            {
+                SetBusy(true);
+                LogInfo("正在清空打印缓冲文件...");
+
+                const string PrintersPath = @"C:\Windows\System32\spool\PRINTERS";
+                const int MaxAttempts = 3;
+
+                // 停止服务
+                using (var svc = new System.ServiceProcess.ServiceController("Spooler"))
+                {
+                    if (svc.Status != System.ServiceProcess.ServiceControllerStatus.Stopped)
+                    {
+                        LogInfo("正在停止 Print Spooler 服务...");
+                        svc.Stop();
+                        svc.WaitForStatus(
+                            System.ServiceProcess.ServiceControllerStatus.Stopped,
+                            TimeSpan.FromSeconds(15)
+                        );
+                    }
+                }
+
+                // 循环清理，直到干净或达到最大次数
+                bool isCleaned = false;
+                for (int i = 1; i <= MaxAttempts && !isCleaned; i++)
+                {
+                    LogInfo($"第 {i} 次清理缓冲文件...");
+
+                    if (Directory.Exists(PrintersPath))
+                    {
+                        // 删除所有文件
+                        foreach (
+                            var file in Directory.GetFiles(
+                                PrintersPath,
+                                "*.*",
+                                SearchOption.AllDirectories
+                            )
+                        )
+                        {
+                            try
+                            {
+                                File.SetAttributes(file, FileAttributes.Normal);
+                                File.Delete(file);
+                            }
+                            catch (Exception fileEx)
+                            {
+                                LogWarning(
+                                    $"无法删除文件: {Path.GetFileName(file)} - {fileEx.Message}"
+                                );
+                            }
+                        }
+
+                        // 删除子目录
+                        foreach (var dir in Directory.GetDirectories(PrintersPath))
+                        {
+                            try
+                            {
+                                Directory.Delete(dir, true);
+                            }
+                            catch (Exception dirEx)
+                            {
+                                LogWarning(
+                                    $"无法删除目录: {Path.GetFileName(dir)} - {dirEx.Message}"
+                                );
+                            }
+                        }
+                    }
+
+                    // 等待系统释放句柄
+                    Thread.Sleep(500);
+
+                    // 验证是否清空完成
+                    if (Directory.Exists(PrintersPath))
+                    {
+                        var remainingFiles = Directory.GetFiles(
+                            PrintersPath,
+                            "*.*",
+                            SearchOption.AllDirectories
+                        );
+                        var remainingDirs = Directory.GetDirectories(PrintersPath);
+
+                        if (remainingFiles.Length == 0 && remainingDirs.Length == 0)
+                        {
+                            isCleaned = true;
+                            LogSuccess("打印缓冲文件已清空完成。");
+                        }
+                        else
+                        {
+                            LogWarning(
+                                $"仍有 {remainingFiles.Length} 个文件、{remainingDirs.Length} 个目录未清理"
+                            );
+                        }
+                    }
+                    else
+                    {
+                        isCleaned = true;
+                        LogSuccess("打印缓冲目录已清空。");
+                    }
+                }
+
+                // 重新启动服务
+                LogInfo("正在启动 Print Spooler 服务...");
+                using (var svc = new System.ServiceProcess.ServiceController("Spooler"))
+                {
+                    svc.Start();
+                    svc.WaitForStatus(
+                        System.ServiceProcess.ServiceControllerStatus.Running,
+                        TimeSpan.FromSeconds(20)
+                    );
+                }
+
+                // 最终结果
+                if (isCleaned)
+                {
+                    LogSuccess("打印任务清空完成，服务已恢复。");
+                    RefreshPrinters();
+                }
+                else
+                {
+                    int remainingCount = Directory.Exists(PrintersPath)
+                        ? Directory
+                            .GetFiles(PrintersPath, "*.*", SearchOption.AllDirectories)
+                            .Length
+                        : 0;
+
+                    LogError($"清空未完成，仍有 {remainingCount} 个文件无法删除");
+                    MessageBox.Show(
+                        $"清空未完成！\n\n仍有 {remainingCount} 个文件无法删除。\n建议重启电脑后再试，或检查是否有杀毒软件拦截。",
+                        "清理失败",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowError("清空打印任务失败", ex);
+            }
+            finally
+            {
+                SetBusy(false);
+            }
         }
     }
 }
