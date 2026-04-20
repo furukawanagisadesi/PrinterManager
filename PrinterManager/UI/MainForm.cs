@@ -350,11 +350,13 @@ namespace PrinterManager.UI
 
         private void LogInfo(string msg) => AppendLog(msg, Color.FromArgb(200, 205, 215));
 
-        private void LogSuccess(string msg) => AppendLog("✔ " + msg, Color.FromArgb(0, 130, 60));
+        private void LogSuccess(string msg) =>
+            AppendLog("[成功] " + msg, Color.FromArgb(0, 130, 60));
 
-        private void LogWarning(string msg) => AppendLog("⚠ " + msg, Color.FromArgb(180, 100, 0));
+        private void LogWarning(string msg) =>
+            AppendLog("[告警] " + msg, Color.FromArgb(180, 100, 0));
 
-        private void LogError(string msg) => AppendLog("✖ " + msg, Color.FromArgb(180, 0, 0));
+        private void LogError(string msg) => AppendLog("[失败] " + msg, Color.FromArgb(180, 0, 0));
 
         private void AppendLog(string msg, Color color)
         {
