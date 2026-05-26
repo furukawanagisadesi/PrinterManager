@@ -93,6 +93,22 @@ namespace PrinterManager.Core
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public struct DRIVER_INFO_4
+        {
+            public uint cVersion;
+            [MarshalAs(UnmanagedType.LPTStr)] public string pName;
+            [MarshalAs(UnmanagedType.LPTStr)] public string pEnvironment;
+            [MarshalAs(UnmanagedType.LPTStr)] public string pDriverPath;
+            [MarshalAs(UnmanagedType.LPTStr)] public string pDataFile;
+            [MarshalAs(UnmanagedType.LPTStr)] public string pConfigFile;
+            [MarshalAs(UnmanagedType.LPTStr)] public string pHelpFile;
+            [MarshalAs(UnmanagedType.LPTStr)] public string pDependentFiles;
+            [MarshalAs(UnmanagedType.LPTStr)] public string pMonitorName;
+            [MarshalAs(UnmanagedType.LPTStr)] public string pDefaultDataType;
+            [MarshalAs(UnmanagedType.LPTStr)] public string pszzzPreviousNames;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         public struct DRIVER_INFO_6
         {
             public uint cVersion;

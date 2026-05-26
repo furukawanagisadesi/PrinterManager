@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.ServiceProcess;
+using System.Text;
+using System.Threading.Tasks;
+using Microsoft.Win32;
 using PrinterManager.Models;
 
 namespace PrinterManager.Core
@@ -13,15 +18,46 @@ namespace PrinterManager.Core
     public static class DriverOperations
     {
         /// <summary>
+        /// 进程执行结果（替代 ValueTuple）
+        /// </summary>
+        public class ProcessResult
+        {
+            public bool Success { get; }
+            public string Output { get; }
+
+            public ProcessResult(bool success, string output)
+            {
+                Success = success;
+                Output = output;
+            }
+
+            public void Deconstruct(out bool success, out string output)
+            {
+                success = Success;
+                output = Output;
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // 枚举驱动
+        // ══════════════════════════════════════════════════════════════
+
+        /// <summary>
         /// 枚举本机已安装的所有打印机驱动（版本3和版本4）
         /// </summary>
         public static List<DriverInfo> EnumerateDrivers()
         {
             var list = new List<DriverInfo>();
+            EnumerateDriversLevel3(list);
+            EnumerateDriversLevel4(list);
+            list.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            return list;
+        }
 
+        private static void EnumerateDriversLevel3(List<DriverInfo> list)
+        {
             uint needed = 0,
                 returned = 0;
-            // 先获取缓冲区大小
             PrinterApiWrapper.EnumPrinterDrivers(
                 null,
                 null,
@@ -31,9 +67,8 @@ namespace PrinterManager.Core
                 ref needed,
                 ref returned
             );
-
             if (needed == 0)
-                return list;
+                return;
 
             IntPtr buf = Marshal.AllocHGlobal((int)needed);
             try
@@ -51,8 +86,7 @@ namespace PrinterManager.Core
                 )
                 {
                     int err = Marshal.GetLastWin32Error();
-                    // ERROR_INSUFFICIENT_BUFFER = 122，重新尝试
-                    if (err == 122)
+                    if (err == 122) // ERROR_INSUFFICIENT_BUFFER
                     {
                         Marshal.FreeHGlobal(buf);
                         buf = Marshal.AllocHGlobal((int)needed);
@@ -82,7 +116,6 @@ namespace PrinterManager.Core
                     var info = (PrinterApiWrapper.DRIVER_INFO_3)
                         Marshal.PtrToStructure(ptr, typeof(PrinterApiWrapper.DRIVER_INFO_3));
 
-                    // 避免重复（同驱动多版本）
                     if (
                         !list.Exists(d =>
                             string.Equals(d.Name, info.pName, StringComparison.OrdinalIgnoreCase)
@@ -113,10 +146,106 @@ namespace PrinterManager.Core
             {
                 Marshal.FreeHGlobal(buf);
             }
-
-            list.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
-            return list;
         }
+
+        private static void EnumerateDriversLevel4(List<DriverInfo> list)
+        {
+            // V4 驱动（Win8.1+），旧系统不支持时静默忽略
+            uint needed = 0,
+                returned = 0;
+            PrinterApiWrapper.EnumPrinterDrivers(
+                null,
+                null,
+                4,
+                IntPtr.Zero,
+                0,
+                ref needed,
+                ref returned
+            );
+            if (needed == 0)
+                return;
+
+            IntPtr buf = Marshal.AllocHGlobal((int)needed);
+            try
+            {
+                if (
+                    !PrinterApiWrapper.EnumPrinterDrivers(
+                        null,
+                        null,
+                        4,
+                        buf,
+                        needed,
+                        ref needed,
+                        ref returned
+                    )
+                )
+                {
+                    int err = Marshal.GetLastWin32Error();
+                    if (err == 122)
+                    {
+                        Marshal.FreeHGlobal(buf);
+                        buf = Marshal.AllocHGlobal((int)needed);
+                        if (
+                            !PrinterApiWrapper.EnumPrinterDrivers(
+                                null,
+                                null,
+                                4,
+                                buf,
+                                needed,
+                                ref needed,
+                                ref returned
+                            )
+                        )
+                            return;
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+
+                int structSize = Marshal.SizeOf(typeof(PrinterApiWrapper.DRIVER_INFO_4));
+                for (int i = 0; i < returned; i++)
+                {
+                    IntPtr ptr = new IntPtr(buf.ToInt64() + i * structSize);
+                    var info = (PrinterApiWrapper.DRIVER_INFO_4)
+                        Marshal.PtrToStructure(ptr, typeof(PrinterApiWrapper.DRIVER_INFO_4));
+
+                    if (
+                        !list.Exists(d =>
+                            string.Equals(d.Name, info.pName, StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(
+                                d.Environment,
+                                info.pEnvironment,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                            && d.Version == info.cVersion
+                        )
+                    )
+                    {
+                        list.Add(
+                            new DriverInfo
+                            {
+                                Name = info.pName,
+                                Environment = info.pEnvironment,
+                                DriverPath = info.pDriverPath,
+                                DataFile = info.pDataFile,
+                                ConfigFile = info.pConfigFile,
+                                Version = info.cVersion,
+                            }
+                        );
+                    }
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buf);
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // 删除驱动（Win32 API）
+        // ══════════════════════════════════════════════════════════════
 
         /// <summary>
         /// 删除打印机驱动（同时删除关联文件）
@@ -130,11 +259,10 @@ namespace PrinterManager.Core
             bool deleteFiles = true
         )
         {
-            uint deleteFlag = deleteFiles
-                ? PrinterApiWrapper.DPD_DELETE_ALL_FILES | PrinterApiWrapper.DPD_DELETE_UNUSED_FILES
-                : 0;
+            // DPD_DELETE_ALL_FILES 与 DPD_DELETE_UNUSED_FILES 语义互斥，只用其中一个。
+            // DPD_DELETE_UNUSED_FILES 更安全：只删没有被其他驱动引用的文件
+            uint deleteFlag = deleteFiles ? PrinterApiWrapper.DPD_DELETE_UNUSED_FILES : 0;
 
-            // 尝试用 DeletePrinterDriverEx（支持删文件）
             bool ok = PrinterApiWrapper.DeletePrinterDriverEx(
                 null,
                 environment,
@@ -153,62 +281,678 @@ namespace PrinterManager.Core
                     if (!ok)
                         throw new Win32Exception(
                             Marshal.GetLastWin32Error(),
-                            $"删除驱动 \"{driverName}\" 失败"
+                            string.Format("删除驱动 \"{0}\" 失败", driverName)
                         );
                 }
                 else
                 {
                     throw new Win32Exception(
                         err,
-                        $"删除驱动 \"{driverName}\" 失败（错误码 {err}）"
+                        string.Format("删除驱动 \"{0}\" 失败（错误码 {1}）", driverName, err)
                     );
                 }
             }
         }
 
+        // ══════════════════════════════════════════════════════════════
+        // pnputil 包装
+        // ══════════════════════════════════════════════════════════════
+
         /// <summary>
-        /// 删除驱动的所有版本（version 3 和 version 4）
+        /// 检测指定驱动名称是否已安装
         /// </summary>
-        public static List<string> DeleteDriverAllVersions(
+        public static bool CheckDriverInstalled(string driverName)
+        {
+            var drivers = EnumerateDrivers();
+            return drivers.Exists(d =>
+                string.Equals(d.Name, driverName, StringComparison.OrdinalIgnoreCase)
+            );
+        }
+
+        /// <summary>
+        /// 通过 pnputil 安装驱动包（.inf）
+        /// </summary>
+        public static ProcessResult RunPnputilAddDriver(string infPath)
+        {
+            if (!File.Exists(infPath))
+                throw new FileNotFoundException(string.Format("驱动包文件不存在: {0}", infPath));
+
+            return RunProcess(
+                "pnputil.exe",
+                string.Format("/add-driver \"{0}\" /install", infPath)
+            );
+        }
+
+        /// <summary>
+        /// 通过 pnputil 删除驱动包
+        /// </summary>
+        public static ProcessResult RunPnputilDeleteDriver(string publishedName)
+        {
+            return RunProcess(
+                "pnputil.exe",
+                string.Format("/delete-driver \"{0}\" /force", publishedName)
+            );
+        }
+
+        /// <summary>
+        /// 通用进程执行辅助方法。
+        /// 用两个并行 Task 读取 stdout/stderr，彻底避免缓冲区死锁。
+        /// </summary>
+        private static ProcessResult RunProcess(string fileName, string arguments)
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+
+            using (var process = Process.Start(psi))
+            {
+                var outputTask = Task.Factory.StartNew(() => process.StandardOutput.ReadToEnd());
+                var errorTask = Task.Factory.StartNew(() => process.StandardError.ReadToEnd());
+
+                bool exited = process.WaitForExit(60000);
+                if (!exited)
+                {
+                    process.Kill();
+                    throw new System.TimeoutException(
+                        string.Format("进程 '{0}' 执行超过 60 秒，已强制终止。", fileName)
+                    );
+                }
+
+                string output = outputTask.Result;
+                string error = errorTask.Result;
+
+                string fullOutput = output;
+                if (!string.IsNullOrEmpty(error))
+                    fullOutput += "\n[Error]\n" + error;
+
+                return new ProcessResult(process.ExitCode == 0, fullOutput);
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // INF 解析
+        // ══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 从 INF 文件解析真实的打印机驱动名称
+        /// </summary>
+        public static string ParseDriverNameFromInf(string infPath)
+        {
+            string[] lines;
+            try
+            {
+                lines = File.ReadAllLines(infPath);
+            }
+            catch
+            {
+                return Path.GetFileNameWithoutExtension(infPath);
+            }
+
+            var strings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var manufacturerSections = new List<string>();
+            string currentSection = null;
+            bool inStrings = false;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (string.IsNullOrEmpty(line) || line.StartsWith(";"))
+                    continue;
+
+                if (line.StartsWith("[") && line.EndsWith("]"))
+                {
+                    currentSection = line.TrimStart('[').TrimEnd(']').Trim();
+                    inStrings = currentSection.Equals(
+                        "Strings",
+                        StringComparison.OrdinalIgnoreCase
+                    );
+                    continue;
+                }
+
+                if (inStrings && line.Contains("="))
+                {
+                    int eq = line.IndexOf("=");
+                    string k = line.Substring(0, eq).Trim().Trim('%');
+                    string v = line.Substring(eq + 1).Trim().Trim('"');
+                    if (!string.IsNullOrEmpty(k) && !string.IsNullOrEmpty(v))
+                        strings[k] = v;
+                }
+
+                if (
+                    currentSection != null
+                    && currentSection.StartsWith("Manufacturer", StringComparison.OrdinalIgnoreCase)
+                    && !inStrings
+                    && line.Contains("=")
+                )
+                {
+                    int eq = line.IndexOf("=");
+                    string right = line.Substring(eq + 1).Trim().Trim('"');
+                    if (!string.IsNullOrEmpty(right))
+                        manufacturerSections.Add(right);
+                }
+            }
+
+            foreach (var mfgSecBase in manufacturerSections)
+            {
+                currentSection = null;
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string line = lines[i].Trim();
+                    if (string.IsNullOrEmpty(line) || line.StartsWith(";"))
+                        continue;
+                    if (line.StartsWith("[") && line.EndsWith("]"))
+                    {
+                        currentSection = line.TrimStart('[').TrimEnd(']').Trim();
+                        continue;
+                    }
+                    bool inSection =
+                        currentSection != null
+                        && (
+                            currentSection.Equals(mfgSecBase, StringComparison.OrdinalIgnoreCase)
+                            || currentSection.StartsWith(
+                                mfgSecBase + ".",
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        );
+                    if (inSection && line.Contains("="))
+                    {
+                        int eq = line.IndexOf("=");
+                        string left = line.Substring(0, eq).Trim();
+                        if (left.StartsWith("\"") && left.EndsWith("\""))
+                            return left.Trim('"');
+                        if (left.StartsWith("%") && left.EndsWith("%"))
+                        {
+                            string key = left.Trim('%');
+                            string r;
+                            if (strings.TryGetValue(key, out r))
+                                return r;
+                        }
+                    }
+                }
+            }
+
+            return Path.GetFileNameWithoutExtension(infPath);
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // 安装驱动
+        // ══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 完整安装驱动流程
+        /// </summary>
+        /// <param name="infPath">驱动 .inf 文件路径</param>
+        /// <param name="driverName">驱动名称</param>
+        public static void InstallDriver(string infPath, string driverName)
+        {
+            if (CheckDriverInstalled(driverName))
+                throw new InvalidOperationException(
+                    string.Format("驱动 \"{0}\" 已安装，无需重复安装。", driverName)
+                );
+
+            var result = RunPnputilAddDriver(infPath);
+            if (!result.Success)
+                throw new InvalidOperationException(
+                    string.Format("pnputil 安装驱动包失败:\n{0}", result.Output)
+                );
+
+            AddDriverViaApi(driverName);
+        }
+
+        /// <summary>
+        /// 通过 Windows API AddPrinterDriver 注册驱动
+        /// </summary>
+        private static void AddDriverViaApi(string driverName)
+        {
+            var drivers = EnumerateDrivers();
+            var driver = drivers.Find(d =>
+                string.Equals(d.Name, driverName, StringComparison.OrdinalIgnoreCase)
+            );
+
+            if (driver == null)
+                throw new InvalidOperationException(
+                    string.Format("驱动 \"{0}\" 未通过 pnputil 成功安装到系统中。", driverName)
+                );
+
+            var drvInfo = new PrinterApiWrapper.DRIVER_INFO_3
+            {
+                cVersion = driver.Version,
+                pName = driver.Name,
+                pEnvironment = driver.Environment,
+                pDriverPath = driver.DriverPath,
+                pDataFile = driver.DataFile,
+                pConfigFile = driver.ConfigFile,
+            };
+
+            IntPtr ptr = Marshal.AllocHGlobal(Marshal.SizeOf(drvInfo));
+            try
+            {
+                Marshal.StructureToPtr(drvInfo, ptr, false);
+                if (!PrinterApiWrapper.AddPrinterDriver(null, 3, ptr))
+                {
+                    int err = Marshal.GetLastWin32Error();
+                    // ERROR_PRINTER_DRIVER_ALREADY_INSTALLED = 1795，可忽略
+                    if (err != 1795)
+                        throw new Win32Exception(
+                            err,
+                            string.Format("AddPrinterDriver 注册驱动 \"{0}\" 失败", driverName)
+                        );
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ptr);
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // 注册表查找 / Published Name 查找
+        // ══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 通过 PowerShell 查找驱动对应的 Published Name（oemNN.inf）。
+        /// 先解析 pnputil /enum-drivers 输出构建原始 INF 名 → 发布名映射，
+        /// 再通过 Get-PrinterDriver 获取 INF 文件名进行匹配。
+        /// </summary>
+        public static string FindPublishedName(string driverName)
+        {
+            string psScript = string.Format(
+                @"
+$driverMap = @{{}}
+$current = @{{}}
+pnputil /enum-drivers | ForEach-Object {{
+    $line = $_.Trim()
+    if ($line -match '^Published Name\s*:\s*(.+)') {{
+        $current['Published'] = $Matches[1].Trim()
+    }} elseif ($line -match '^Original Name\s*:\s*(.+)') {{
+        $current['Original'] = $Matches[1].Trim()
+    }} elseif ($line -eq '') {{
+        if ($current['Original'] -and $current['Published']) {{
+            $driverMap[$current['Original']] = $current['Published']
+        }}
+        $current = @{{}}
+    }}
+}}
+
+$driver = Get-PrinterDriver -Name '{0}' -ErrorAction SilentlyContinue
+if ($driver) {{
+    $infFileName = Split-Path $driver.InfPath -Leaf
+    $driverMap[$infFileName]
+}}
+",
+                driverName.Replace("'", "''")
+            );
+
+            var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(psScript));
+
+            var result = RunProcess(
+                "powershell.exe",
+                string.Format("-NoProfile -ExecutionPolicy Bypass -EncodedCommand {0}", encoded)
+            );
+
+            if (result.Success)
+            {
+                string output = result.Output?.Trim();
+                if (!string.IsNullOrEmpty(output))
+                    return output;
+            }
+
+            return null;
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // Spooler 服务管理
+        // ══════════════════════════════════════════════════════════════
+
+        private const string SpoolerServiceName = "Spooler";
+        private const int SpoolerTimeoutMs = 15000;
+
+        /// <summary>
+        /// 停止后台打印服务，返回是否原本正在运行（用于后续恢复）
+        /// </summary>
+        private static bool StopSpoolerIfRunning()
+        {
+            using (var svc = new ServiceController(SpoolerServiceName))
+            {
+                bool wasRunning =
+                    svc.Status == ServiceControllerStatus.Running
+                    || svc.Status == ServiceControllerStatus.StartPending;
+
+                if (wasRunning)
+                {
+                    svc.Stop();
+                    svc.WaitForStatus(
+                        ServiceControllerStatus.Stopped,
+                        TimeSpan.FromMilliseconds(SpoolerTimeoutMs)
+                    );
+                }
+                return wasRunning;
+            }
+        }
+
+        /// <summary>
+        /// 恢复后台打印服务，失败时抛出异常（由调用方决定如何处理）
+        /// </summary>
+        private static void StartSpooler()
+        {
+            using (var svc = new ServiceController(SpoolerServiceName))
+            {
+                if (
+                    svc.Status != ServiceControllerStatus.Running
+                    && svc.Status != ServiceControllerStatus.StartPending
+                )
+                {
+                    svc.Start();
+                    svc.WaitForStatus(
+                        ServiceControllerStatus.Running,
+                        TimeSpan.FromMilliseconds(SpoolerTimeoutMs)
+                    );
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // 终止占用驱动文件的进程
+        // ══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 枚举所有加载了 spool\drivers 下 DLL 的进程（除 Spooler 外），尝试终止。
+        /// </summary>
+        private static void KillProcessesHoldingSpoolDriverFiles()
+        {
+            string spoolDriversDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.System),
+                    @"spool\drivers"
+                )
+                .ToLowerInvariant();
+
+            int currentPid = Process.GetCurrentProcess().Id;
+
+            var targetProcs = new List<Process>();
+
+            foreach (var proc in Process.GetProcesses())
+            {
+                if (proc.Id == currentPid)
+                    continue;
+
+                try
+                {
+                    bool matched = false;
+                    foreach (ProcessModule module in proc.Modules)
+                    {
+                        string filePath = module.FileName.ToLowerInvariant();
+                        if (filePath.StartsWith(spoolDriversDir, StringComparison.Ordinal))
+                        {
+                            matched = true;
+                            break;
+                        }
+                    }
+
+                    if (matched)
+                        targetProcs.Add(proc);
+                }
+                catch
+                {
+                    // 访问被拒绝（如 SYSTEM 进程）或进程已退出，跳过
+                }
+            }
+
+            foreach (var proc in targetProcs)
+            {
+                if (proc.HasExited)
+                    continue;
+
+                string procInfo = string.Format("{0}(PID={1})", proc.ProcessName, proc.Id);
+                try
+                {
+                    proc.Kill();
+                    if (!proc.WaitForExit(5000))
+                        Debug.WriteLine(string.Format("进程 {0} 未能在5秒内终止", procInfo));
+                    else
+                        Debug.WriteLine(string.Format("进程 {0} 已终止", procInfo));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(string.Format("终止进程 {0} 失败: {1}", procInfo, ex.Message));
+                }
+                finally
+                {
+                    proc.Dispose();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 清空 spool\PRINTERS 目录下的残留队列文件（.SHD / .SPL）。
+        ///
+        /// 必须在 Spooler 停止后调用。
+        /// 残留的队列文件会在 Spooler 重启时被重新加载，Spooler 会重新持有驱动文件句柄，
+        /// 导致随后的 DeletePrinterDriverEx 仍然返回 3001。
+        /// </summary>
+        private static void ClearSpoolPrinterFiles()
+        {
+            string spoolPrintersDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System),
+                @"spool\PRINTERS"
+            );
+
+            if (!Directory.Exists(spoolPrintersDir))
+                return;
+
+            foreach (string file in Directory.GetFiles(spoolPrintersDir))
+            {
+                try
+                {
+                    File.Delete(file);
+                    Debug.WriteLine(string.Format("已删除队列文件: {0}", file));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(string.Format("删除队列文件失败 {0}: {1}", file, ex.Message));
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // 增强版卸载入口（混合模式）
+        // ══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 混合卸载驱动：PowerShell 获取 INF 路径 + C# 读取 INF +
+        /// Win32 API 卸载 + 手动删除驱动文件。
+        ///
+        /// 完整流程：
+        ///   1.  PowerShell：删除打印机对象 + 获取驱动 INF 路径
+        ///   2.  C#：读取 INF 文件（解析 Version 信息）
+        ///   3.  停止 Spooler
+        ///   4.  清空 spool\PRINTERS 队列残留文件
+        ///   5.  终止占用驱动文件的进程
+        ///   6.  Win32 API（DeletePrinterDriverEx）卸载驱动
+        ///   7.  手动删除 Driver Store 目录
+        ///   8.  清理注册表键
+        ///   9.  恢复 Spooler
+        /// </summary>
+        /// <param name="driverName">驱动名称</param>
+        /// <param name="publishedName">已废弃，保留仅为兼容</param>
+        /// <param name="catalogDir">已废弃，保留仅为兼容</param>
+        public static List<string> UninstallDriverEnhanced(
             string driverName,
-            string environment = null,
-            bool deleteFiles = true
+            string publishedName = null,
+            string catalogDir = null
         )
         {
             var errors = new List<string>();
 
-            // 先在 Spooler 运行时收集驱动文件路径（停了之后就查不到了）
-            List<string> driverFilePaths = new List<string>();
-            if (deleteFiles)
-                driverFilePaths = CollectDriverFilePaths(driverName);
+            // ──────────────────────────────────────────────────────────
+            // Phase 1: PowerShell — 删除打印机 + 获取 INF 路径
+            // ──────────────────────────────────────────────────────────
+            string psScript = string.Format(
+                @"
+$ProgressPreference = 'SilentlyContinue'
+$driverName = '{0}'
 
-            // 1. 停止 Spooler
-            ServiceControllerStatus originalStatus;
-            try
+# 1. 删除所有使用该驱动的打印机对象
+Get-Printer | Where-Object {{ $_.DriverName -eq $driverName }} | ForEach-Object {{
+    Remove-Printer -Name $_.Name -Confirm:$false -ErrorAction SilentlyContinue
+}}
+
+# 2. 获取驱动 INF 路径（供 C# 后续处理）
+$driver = Get-PrinterDriver -Name $driverName -ErrorAction SilentlyContinue
+if ($driver -and $driver.InfPath) {{
+    Write-Output ""INF_PATH:$($driver.InfPath)""
+}}
+",
+                driverName.Replace("'", "''")
+            );
+
+            var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(psScript));
+
+            var psResult = RunProcess(
+                "powershell.exe",
+                string.Format("-NoProfile -ExecutionPolicy Bypass -EncodedCommand {0}", encoded)
+            );
+
+            // 解析 INF 路径
+            string infPath = null;
+            if (psResult.Output != null)
             {
-                originalStatus = StopSpooler();
+                foreach (
+                    string line in psResult.Output.Split(
+                        new[] { '\r', '\n' },
+                        StringSplitOptions.RemoveEmptyEntries
+                    )
+                )
+                {
+                    string trimmed = line.Trim();
+                    if (trimmed.StartsWith("INF_PATH:"))
+                    {
+                        infPath = trimmed.Substring("INF_PATH:".Length).Trim();
+                        break;
+                    }
+                }
             }
-            catch (Exception ex)
+
+            if (string.IsNullOrEmpty(infPath))
             {
-                throw new InvalidOperationException(
-                    "停止 Print Spooler 服务失败，无法删除驱动。\n" + ex.Message,
-                    ex
+                errors.Add(
+                    string.Format(
+                        "未找到驱动 \"{0}\" 的 INF 文件路径。PowerShell 输出:\n{1}",
+                        driverName,
+                        psResult.Output ?? "(null)"
+                    )
                 );
+                // 即使无 INF 路径，仍继续尝试 Win32 API 卸载
             }
+
+            // ──────────────────────────────────────────────────────────
+            // Phase 2: C# 读取 INF 文件 → 确定驱动版本 (V3/V4)
+            // ──────────────────────────────────────────────────────────
+            string driverVersion = null; // "3" 或 "4"
+            if (!string.IsNullOrEmpty(infPath) && File.Exists(infPath))
+            {
+                try
+                {
+                    var lines = File.ReadAllLines(infPath);
+                    bool inVersion = false;
+                    foreach (string line in lines)
+                    {
+                        string trim = line.Trim();
+                        if (trim.Equals("[Version]", StringComparison.OrdinalIgnoreCase))
+                        {
+                            inVersion = true;
+                            continue;
+                        }
+                        if (inVersion)
+                        {
+                            if (trim.StartsWith("["))
+                                break; // 下一段落
+                            if (trim.StartsWith("Signature", StringComparison.OrdinalIgnoreCase))
+                            {
+                                string val = trim.Substring(trim.IndexOf('=') + 1).Trim();
+                                // V3: "$CHICAGO$", V4: "$Windows NT$"
+                                if (val.IndexOf("CHICAGO", StringComparison.OrdinalIgnoreCase) >= 0)
+                                    driverVersion = "3";
+                                else if (
+                                    val.IndexOf("Windows NT", StringComparison.OrdinalIgnoreCase)
+                                    >= 0
+                                )
+                                    driverVersion = "4";
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(string.Format("读取 INF 文件失败: {0}", ex.Message));
+                }
+            }
+
+            // ──────────────────────────────────────────────────────────
+            // Phase 3: Win32 API 卸载 + 文件/注册表清理
+            // ──────────────────────────────────────────────────────────
+            bool spoolerWasRunning = false;
 
             try
             {
-                // 2. 直接删注册表中的驱动记录
-                DeleteDriverFromRegistry(driverName, errors);
+                // 3a. 停止 Spooler（以便清空 PRINTERS 目录和释放文件锁定）
+                spoolerWasRunning = StopSpoolerIfRunning();
 
-                // 3. 删除驱动文件
-                if (deleteFiles)
-                    DeleteDriverFiles(driverFilePaths, errors);
+                // 3b. 清空 spool\PRINTERS
+                ClearSpoolPrinterFiles();
+
+                // 3c. 终止占用驱动文件的进程
+                KillProcessesHoldingSpoolDriverFiles();
+
+                // 3d. Win32 API 卸载驱动（DeletePrinterDriverEx 需要 Spooler 运行）
+                //     临时启动 Spooler 以便 API 调用成功
+                try
+                {
+                    StartSpooler();
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(string.Format("临时启动 Spooler 失败: {0}", ex.Message));
+                }
+
+                try
+                {
+                    DeleteDriver(driverName, deleteFiles: true);
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(string.Format("Win32 API 卸载驱动失败: {0}", ex.Message));
+                }
+
+                // 再次停止 Spooler 以进行文件/注册表清理
+                try
+                {
+                    StopSpoolerIfRunning();
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(string.Format("再次停止 Spooler 失败: {0}", ex.Message));
+                }
+
+                // 3e. 手动删除 Driver Store 目录
+                if (!string.IsNullOrEmpty(infPath))
+                {
+                    string driverStoreDir = Path.GetDirectoryName(infPath);
+                    DeleteDriverStoreDirectory(driverStoreDir, errors);
+                }
+
+                // 3f. 清理注册表
+                CleanDriverRegistry(driverName, driverVersion, errors);
             }
             finally
             {
-                // 4. 重启 Spooler
-                if (originalStatus != ServiceControllerStatus.Stopped)
+                // 3g. 恢复 Spooler（无论前面是否出错）
+                if (spoolerWasRunning)
                 {
                     try
                     {
@@ -216,7 +960,7 @@ namespace PrinterManager.Core
                     }
                     catch (Exception ex)
                     {
-                        errors.Add("⚠ Print Spooler 重启失败，请手动启动：" + ex.Message);
+                        errors.Add(string.Format("恢复 Spooler 失败: {0}", ex.Message));
                     }
                 }
             }
@@ -225,200 +969,97 @@ namespace PrinterManager.Core
         }
 
         /// <summary>
-        /// Spooler 运行时，通过注册表读取驱动文件路径列表
+        /// 删除 Driver Store 目录（先尝试普通删除，失败后 takeown 提权）
         /// </summary>
-        private static List<string> CollectDriverFilePaths(string driverName)
+        private static void DeleteDriverStoreDirectory(string dirPath, List<string> errors)
         {
-            var paths = new List<string>();
-            // 驱动文件记录在两个位置（Version 3 / Version 4）
-            string[] regRoots =
+            if (string.IsNullOrEmpty(dirPath) || !Directory.Exists(dirPath))
+                return;
+
+            try
             {
-                @"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-3",
-                @"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-4",
-                @"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Drivers\Version-3",
-            };
-
-            foreach (string root in regRoots)
-            {
-                try
-                {
-                    using (
-                        var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
-                            root + @"\" + driverName
-                        )
-                    )
-                    {
-                        if (key == null)
-                            continue;
-
-                        // 收集所有文件路径值
-                        string[] valueNames =
-                        {
-                            "Driver",
-                            "ConfigFile",
-                            "DataFile",
-                            "HelpFile",
-                            "DependentFiles",
-                        };
-                        foreach (string vn in valueNames)
-                        {
-                            object val = key.GetValue(vn);
-                            if (val == null)
-                                continue;
-
-                            if (val is string s && !string.IsNullOrEmpty(s))
-                                paths.Add(ExpandDriverPath(s));
-                            else if (val is string[] arr)
-                                foreach (string f in arr)
-                                    if (!string.IsNullOrEmpty(f))
-                                        paths.Add(ExpandDriverPath(f));
-                        }
-                    }
-                }
-                catch { }
+                Directory.Delete(dirPath, recursive: true);
+                Debug.WriteLine(string.Format("已删除 Driver Store 目录: {0}", dirPath));
             }
-
-            return paths;
-        }
-
-        /// <summary>
-        /// 驱动路径可能是相对路径（如 EPSONL8.DLL），展开为完整路径
-        /// </summary>
-        private static string ExpandDriverPath(string path)
-        {
-            if (System.IO.Path.IsPathRooted(path))
-                return path;
-
-            // 默认驱动目录
-            string driverDir = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.System),
-                "spool",
-                "drivers",
-                "x64",
-                "3"
-            );
-
-            return System.IO.Path.Combine(driverDir, path);
-        }
-
-        /// <summary>
-        /// 直接从注册表删除驱动记录（Spooler 停止后使用）
-        /// </summary>
-        private static void DeleteDriverFromRegistry(string driverName, List<string> errors)
-        {
-            string[] regRoots =
+            catch
             {
-                @"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-3",
-                @"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-4",
-                @"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Drivers\Version-3",
-            };
-
-            foreach (string root in regRoots)
-            {
+                // 提权后重试
                 try
                 {
-                    using (
-                        var parentKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
-                            root,
-                            writable: true
-                        )
-                    )
-                    {
-                        if (parentKey == null)
-                            continue;
-
-                        // 检查子键是否存在
-                        bool exists = Array.Exists(
-                            parentKey.GetSubKeyNames(),
-                            n => string.Equals(n, driverName, StringComparison.OrdinalIgnoreCase)
-                        );
-
-                        if (!exists)
-                            continue;
-
-                        parentKey.DeleteSubKeyTree(driverName, throwOnMissingSubKey: false);
-                    }
+                    RunProcess("takeown.exe", string.Format("/f \"{0}\" /r /d y", dirPath));
+                    RunProcess(
+                        "icacls.exe",
+                        string.Format("\"{0}\" /grant administrators:F /t", dirPath)
+                    );
+                    Directory.Delete(dirPath, recursive: true);
+                    Debug.WriteLine(string.Format("提权后已删除 Driver Store 目录: {0}", dirPath));
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"注册表删除失败 [{root}\\{driverName}]: {ex.Message}");
+                    errors.Add(string.Format("删除 Driver Store 目录失败: {0}", ex.Message));
                 }
             }
         }
 
         /// <summary>
-        /// 删除驱动相关文件（忽略系统共用文件的删除失败）
+        /// 清理驱动注册表键（根据 INF 判断的版本精准删除，否则全删）
+        /// 注：DeletePrinterDriverEx 已在 Spooler 端清理，此方法作为冗余兜底
         /// </summary>
-        private static void DeleteDriverFiles(List<string> paths, List<string> errors)
+        private static void CleanDriverRegistry(
+            string driverName,
+            string driverVersion,
+            List<string> errors
+        )
         {
-            foreach (string path in paths)
+            // V3 / V4 都尝试，若已通过 INF 确定版本则只清理对应版本
+            string[][] versionArchSets = new[]
             {
-                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
+                new[] { "Version-3", "3" },
+                new[] { "Version-4", "4" },
+            };
+
+            string[][] archPaths = new[]
+            {
+                new[] { "Windows x64", "x64" },
+                new[] { "Windows NT x86", "x86" },
+            };
+
+            foreach (var ver in versionArchSets)
+            {
+                string kv = ver[1]; // "3" or "4"
+                // 如果 INF 已确认版本，跳过不匹配的
+                if (driverVersion != null && driverVersion != kv)
                     continue;
 
-                try
+                foreach (var arch in archPaths)
                 {
-                    System.IO.File.Delete(path);
+                    string keyPath = string.Format(
+                        @"SYSTEM\CurrentControlSet\Control\Print\Environments\{0}\Drivers\{1}\{2}",
+                        arch[0],
+                        ver[0],
+                        driverName
+                    );
+
+                    try
+                    {
+                        using (var key = Registry.LocalMachine.OpenSubKey(keyPath, writable: true))
+                        {
+                            if (key != null)
+                            {
+                                Registry.LocalMachine.DeleteSubKeyTree(keyPath);
+                                Debug.WriteLine(
+                                    string.Format("已清除注册表键: HKLM\\{0}", keyPath)
+                                );
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add(
+                            string.Format("清除注册表键失败 HKLM\\{0}: {1}", keyPath, ex.Message)
+                        );
+                    }
                 }
-                catch (Exception ex)
-                {
-                    // 文件被其他驱动共用时删除会失败，记录警告但不中断
-                    errors.Add(
-                        $"文件删除失败（可能被其他驱动共用）: {System.IO.Path.GetFileName(path)} - {ex.Message}"
-                    );
-                }
-            }
-        }
-
-        private const string SpoolerServiceName = "Spooler";
-        private const int SpoolerStopTimeoutMs = 15000;
-        private const int SpoolerStartTimeoutMs = 20000;
-
-        private static ServiceControllerStatus StopSpooler()
-        {
-            using (var svc = new ServiceController(SpoolerServiceName))
-            {
-                ServiceControllerStatus originalStatus = svc.Status;
-
-                if (svc.Status == ServiceControllerStatus.Stopped)
-                    return originalStatus;
-
-                if (svc.Status == ServiceControllerStatus.StartPending)
-                    svc.WaitForStatus(
-                        ServiceControllerStatus.Running,
-                        TimeSpan.FromMilliseconds(SpoolerStartTimeoutMs)
-                    );
-
-                if (svc.Status != ServiceControllerStatus.Stopped)
-                {
-                    svc.Stop();
-                    svc.WaitForStatus(
-                        ServiceControllerStatus.Stopped,
-                        TimeSpan.FromMilliseconds(SpoolerStopTimeoutMs)
-                    );
-                }
-
-                if (svc.Status != ServiceControllerStatus.Stopped)
-                    throw new InvalidOperationException(
-                        "Print Spooler 服务无法在规定时间内停止，操作已取消。"
-                    );
-
-                return originalStatus;
-            }
-        }
-
-        private static void StartSpooler()
-        {
-            using (var svc = new ServiceController(SpoolerServiceName))
-            {
-                if (svc.Status == ServiceControllerStatus.Running)
-                    return;
-
-                svc.Start();
-                svc.WaitForStatus(
-                    ServiceControllerStatus.Running,
-                    TimeSpan.FromMilliseconds(SpoolerStartTimeoutMs)
-                );
             }
         }
     }

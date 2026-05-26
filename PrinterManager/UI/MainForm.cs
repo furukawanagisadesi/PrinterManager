@@ -279,46 +279,66 @@ namespace PrinterManager.UI
 
             var driver = (DriverInfo)lvDrivers.SelectedItems[0].Tag;
 
-            // 检查是否有打印机正在使用此驱动
+            // 检测是否有打印机正在使用此驱动，自动先删除打印机
             var usingPrinters = _printers.FindAll(p =>
                 string.Equals(p.DriverName, driver.Name, StringComparison.OrdinalIgnoreCase)
             );
+            if (usingPrinters.Count > 0)
+            {
+                string printerList = string.Join("\n  ", usingPrinters.ConvertAll(p => p.Name));
+                var result = MessageBox.Show(
+                    $"以下打印机正在使用此驱动 \"{driver.Name}\"：\n  {printerList}\n\n"
+                        + "将先自动删除这些打印机，再删除驱动程序。\n是否继续？",
+                    "自动删除打印机",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning
+                );
+                if (result == DialogResult.No)
+                    return;
 
-            string warnMsg =
-                usingPrinters.Count > 0
-                    ? $"警告：以下打印机正在使用此驱动，删除驱动将导致这些打印机无法使用：\n  {string.Join("\n  ", usingPrinters.ConvertAll(p => p.Name))}\n\n"
-                    : "";
+                foreach (var printer in usingPrinters)
+                {
+                    try
+                    {
+                        if (printer.IsNetwork)
+                            PrinterOperations.RemoveNetworkPrinterConnection(printer.Name);
+                        else
+                            PrinterOperations.DeletePrinter(printer.Name);
+                        LogInfo($"已自动删除打印机 \"{printer.Name}\"。");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogWarning(
+                            $"删除打印机 \"{printer.Name}\" 失败：{ex.Message}，跳过继续卸载驱动。"
+                        );
+                    }
+                }
+            }
 
-            var result = MessageBox.Show(
-                $"{warnMsg}确定要删除驱动程序 \"{driver.Name}\" 吗？\n\n"
+            var result2 = MessageBox.Show(
+                $"确定要删除驱动程序 \"{driver.Name}\" 吗？\n\n"
                     + $"版本：{driver.VersionText}\n环境：{driver.Environment}\n\n"
-                    + "是否同时删除驱动关联文件（.dll/.inf等）？\n\n"
-                    + "  [是] = 删除驱动 + 文件\n  [否] = 仅删除驱动记录\n  [取消] = 放弃",
+                    + "操作说明：\n"
+                    + "  · 通过 pnputil /delete-driver 删除驱动包（.inf/.cat）\n"
+                    + "  · Win32 API 清理驱动注册表记录及关联文件",
                 "确认删除驱动",
-                MessageBoxButtons.YesNoCancel,
+                MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning
             );
 
-            if (result == DialogResult.Cancel)
+            if (result2 == DialogResult.No)
                 return;
-            bool deleteFiles = (result == DialogResult.Yes);
 
             try
             {
                 SetBusy(true);
-                var errors = DriverOperations.DeleteDriverAllVersions(
-                    driver.Name,
-                    driver.Environment,
-                    deleteFiles
-                );
+                var errors = DriverOperations.UninstallDriverEnhanced(driver.Name);
 
                 if (errors.Count == 0)
-                    LogSuccess(
-                        $"驱动 \"{driver.Name}\" 已成功删除{(deleteFiles ? "（含关联文件）" : "")}。"
-                    );
+                    LogSuccess($"驱动 \"{driver.Name}\" 已成功删除（含关联文件 + 驱动包清理）");
                 else
                     LogWarning(
-                        $"驱动 \"{driver.Name}\" 删除完成，部分版本有警告：\n"
+                        $"驱动 \"{driver.Name}\" 删除完成，部分操作有警告：\n"
                             + string.Join("\n", errors)
                     );
 
@@ -343,6 +363,7 @@ namespace PrinterManager.UI
             btnDeletePrinter.Enabled = !busy;
             btnAddNetwork.Enabled = !busy;
             btnSetDefault.Enabled = !busy;
+            btnToggleShare.Enabled = !busy;
             btnDeleteDriver.Enabled = !busy;
             btnRestartSpooler.Enabled = !busy;
             progressBar.Visible = busy;
@@ -391,13 +412,59 @@ namespace PrinterManager.UI
             bool selected = lvPrinters.SelectedItems.Count > 0;
             btnDeletePrinter.Enabled = selected;
             btnSetDefault.Enabled = selected;
+            btnToggleShare.Enabled = selected;
 
             if (selected)
             {
                 var p = (PrinterInfo)lvPrinters.SelectedItems[0].Tag;
                 UpdateStatusBar(
-                    $"打印机: {p.Name}  |  驱动: {p.DriverName}  |  端口: {p.PortName}  |  状态: {p.StatusText}  |  {(p.IsDefault ? "★ 默认打印机" : "")}"
+                    $"打印机: {p.Name}  |  驱动: {p.DriverName}  |  端口: {p.PortName}  |  状态: {p.StatusText}  |  {(p.IsDefault ? "★ 默认打印机" : "")}  |  {(p.IsShared ? "共享: " + p.ShareName : "未共享")}"
                 );
+            }
+        }
+
+        private void btnInstallDriver_Click(object sender, EventArgs e)
+        {
+            using (var ofd = new OpenFileDialog())
+            {
+                ofd.Title = "选择驱动程序 INF 文件";
+                ofd.Filter = "INF 文件 (*.inf)|*.inf|所有文件 (*.*)|*.*";
+                ofd.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+
+                if (ofd.ShowDialog() != DialogResult.OK)
+                    return;
+
+                string infPath = ofd.FileName;
+
+                // 检查 INF 是否存在
+                if (!File.Exists(infPath))
+                {
+                    ShowError("选中的 INF 文件不存在。", null);
+                    return;
+                }
+
+                try
+                {
+                    SetBusy(true);
+                    LogInfo($"开始安装驱动程序: {Path.GetFileName(infPath)}");
+
+                    // 解析 INF 中的真实驱动名（从 [Manufacturer] → [Strings] 解析）
+                    string driverName = DriverOperations.ParseDriverNameFromInf(infPath);
+                    LogInfo($"解析驱动名称: {driverName}");
+
+                    DriverOperations.InstallDriver(infPath, driverName);
+
+                    LogSuccess($"驱动程序安装成功: {driverName}");
+                    RefreshDrivers();
+                }
+                catch (Exception ex)
+                {
+                    ShowError("安装驱动程序时发生错误", ex);
+                }
+                finally
+                {
+                    SetBusy(false);
+                }
             }
         }
 
@@ -493,6 +560,75 @@ namespace PrinterManager.UI
             catch (Exception ex)
             {
                 ShowError("重启 Print Spooler 失败", ex);
+            }
+            finally
+            {
+                SetBusy(false);
+            }
+        }
+
+        private void btnToggleShare_Click(object sender, EventArgs e)
+        {
+            if (lvPrinters.SelectedItems.Count == 0)
+            {
+                MessageBox.Show(
+                    "请先选择要设置共享的打印机。",
+                    "提示",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+                return;
+            }
+
+            var printer = (PrinterInfo)lvPrinters.SelectedItems[0].Tag;
+
+            try
+            {
+                SetBusy(true);
+
+                if (printer.IsShared)
+                {
+                    // 取消共享
+                    var result = MessageBox.Show(
+                        $"确定要取消打印机 \"{printer.Name}\" 的共享吗？\n\n共享名：{printer.ShareName}",
+                        "确认取消共享",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question
+                    );
+                    if (result != DialogResult.Yes)
+                        return;
+
+                    PrinterOperations.UnsetPrinterShare(printer.Name);
+                    LogSuccess($"已取消打印机 \"{printer.Name}\" 的共享。");
+                }
+                else
+                {
+                    // 设置共享 - 弹窗输入共享名
+                    string shareName = Microsoft.VisualBasic.Interaction.InputBox(
+                        "请输入共享名称：",
+                        "设置打印机共享",
+                        printer.Name,
+                        -1,
+                        -1
+                    );
+
+                    if (string.IsNullOrWhiteSpace(shareName))
+                    {
+                        LogInfo("已取消共享设置操作。");
+                        return;
+                    }
+
+                    PrinterOperations.SetPrinterShare(printer.Name, shareName.Trim());
+                    LogSuccess(
+                        $"已将打印机 \"{printer.Name}\" 设置为共享，共享名：{shareName.Trim()}。"
+                    );
+                }
+
+                RefreshPrinters();
+            }
+            catch (Exception ex)
+            {
+                ShowError("设置打印机共享失败", ex);
             }
             finally
             {

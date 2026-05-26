@@ -234,5 +234,137 @@ namespace PrinterManager.Core
                 return sb.ToString();
             return string.Empty;
         }
+
+        // ─── 共享设置 ───────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// 打开打印机并获取 PRINTER_INFO_2（需调用方负责 ClosePrinter）
+        /// </summary>
+        private static void GetPrinterInfo2(
+            string printerName,
+            out IntPtr hPrinter,
+            out PrinterApiWrapper.PRINTER_INFO_2 info
+        )
+        {
+            hPrinter = IntPtr.Zero;
+            info = default(PrinterApiWrapper.PRINTER_INFO_2);
+            if (!PrinterApiWrapper.OpenPrinter(printerName, out hPrinter, IntPtr.Zero))
+                throw new Win32Exception(
+                    Marshal.GetLastWin32Error(),
+                    $"无法打开打印机 \"{printerName}\""
+                );
+
+            try
+            {
+                // 先查询所需缓冲区大小
+                uint cbNeeded = 0;
+                PrinterApiWrapper.GetPrinter(hPrinter, 2, IntPtr.Zero, 0, ref cbNeeded);
+                int lastErr = Marshal.GetLastWin32Error();
+                // 预期返回 ERROR_INSUFFICIENT_BUFFER (122)，否则抛出
+                if (lastErr != 122) // ERROR_INSUFFICIENT_BUFFER
+                    throw new Win32Exception(lastErr, "获取打印机信息大小失败");
+
+                // 分配缓冲区并查询
+                IntPtr pInfo = Marshal.AllocHGlobal((int)cbNeeded);
+                try
+                {
+                    if (!PrinterApiWrapper.GetPrinter(hPrinter, 2, pInfo, cbNeeded, ref cbNeeded))
+                        throw new Win32Exception(Marshal.GetLastWin32Error(), "获取打印机信息失败");
+
+                    info = (PrinterApiWrapper.PRINTER_INFO_2)
+                        Marshal.PtrToStructure(pInfo, typeof(PrinterApiWrapper.PRINTER_INFO_2));
+                }
+                catch
+                {
+                    Marshal.FreeHGlobal(pInfo);
+                    throw;
+                }
+            }
+            catch
+            {
+                PrinterApiWrapper.ClosePrinter(hPrinter);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 设置打印机为共享
+        /// </summary>
+        /// <param name="printerName">打印机名称</param>
+        /// <param name="shareName">共享名（默认取打印机名）</param>
+        public static void SetPrinterShare(string printerName, string shareName = null)
+        {
+            if (string.IsNullOrEmpty(shareName))
+                shareName = printerName; // 默认用打印机名作为共享名
+
+            IntPtr hPrinter;
+            PrinterApiWrapper.PRINTER_INFO_2 info;
+            GetPrinterInfo2(printerName, out hPrinter, out info);
+
+            try
+            {
+                // 修改共享名和属性
+                info.pShareName = shareName;
+                info.Attributes |= PrinterApiWrapper.PRINTER_ATTRIBUTE_SHARED;
+
+                // 构造新 PRINTER_INFO_2 写入
+                IntPtr pInfo = Marshal.AllocHGlobal(Marshal.SizeOf(info));
+                try
+                {
+                    Marshal.StructureToPtr(info, pInfo, false);
+
+                    if (!PrinterApiWrapper.SetPrinter(hPrinter, 2, pInfo, 0))
+                        throw new Win32Exception(
+                            Marshal.GetLastWin32Error(),
+                            $"设置打印机 \"{printerName}\" 共享失败"
+                        );
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(pInfo);
+                }
+            }
+            finally
+            {
+                PrinterApiWrapper.ClosePrinter(hPrinter);
+            }
+        }
+
+        /// <summary>
+        /// 取消打印机共享
+        /// </summary>
+        public static void UnsetPrinterShare(string printerName)
+        {
+            IntPtr hPrinter;
+            PrinterApiWrapper.PRINTER_INFO_2 info;
+            GetPrinterInfo2(printerName, out hPrinter, out info);
+
+            try
+            {
+                // 清除共享属性
+                info.pShareName = null;
+                info.Attributes &= ~PrinterApiWrapper.PRINTER_ATTRIBUTE_SHARED;
+
+                IntPtr pInfo = Marshal.AllocHGlobal(Marshal.SizeOf(info));
+                try
+                {
+                    Marshal.StructureToPtr(info, pInfo, false);
+
+                    if (!PrinterApiWrapper.SetPrinter(hPrinter, 2, pInfo, 0))
+                        throw new Win32Exception(
+                            Marshal.GetLastWin32Error(),
+                            $"取消打印机 \"{printerName}\" 共享失败"
+                        );
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(pInfo);
+                }
+            }
+            finally
+            {
+                PrinterApiWrapper.ClosePrinter(hPrinter);
+            }
+        }
     }
 }

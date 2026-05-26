@@ -29,6 +29,7 @@ namespace PrinterManager.UI
             this.lvDrivers = new System.Windows.Forms.ListView();
             this.panelDriverToolbar = new System.Windows.Forms.Panel();
             this.btnRefresh2 = new System.Windows.Forms.Button();
+            this.btnInstallDriver = new System.Windows.Forms.Button();
             this.btnDeleteDriver = new System.Windows.Forms.Button();
             this.lblDriverCount = new System.Windows.Forms.Label();
             this.tabLog = new System.Windows.Forms.TabPage();
@@ -40,6 +41,7 @@ namespace PrinterManager.UI
             this.lblStatus = new System.Windows.Forms.Label();
             this.progressBar = new System.Windows.Forms.ProgressBar();
             this.btnCleanPrinters = new System.Windows.Forms.Button();
+            this.btnToggleShare = new System.Windows.Forms.Button();
             this.tabControl.SuspendLayout();
             this.tabPrinters.SuspendLayout();
             this.panelPrinterToolbar.SuspendLayout();
@@ -104,6 +106,7 @@ namespace PrinterManager.UI
             this.panelPrinterToolbar.Controls.Add(this.btnAddNetwork);
             this.panelPrinterToolbar.Controls.Add(this.btnDeletePrinter);
             this.panelPrinterToolbar.Controls.Add(this.btnSetDefault);
+            this.panelPrinterToolbar.Controls.Add(this.btnToggleShare);
             this.panelPrinterToolbar.Controls.Add(this.btnRestartSpooler);
             this.panelPrinterToolbar.Controls.Add(this.lblPrinterCount);
             this.panelPrinterToolbar.Dock = System.Windows.Forms.DockStyle.Top;
@@ -169,12 +172,25 @@ namespace PrinterManager.UI
             this.btnSetDefault.Text = "设为默认";
             this.btnSetDefault.Click += new System.EventHandler(this.btnSetDefault_Click);
             // 
+            // btnToggleShare
+            // 
+            this.btnToggleShare.Enabled = false;
+            this.btnToggleShare.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(180)))), ((int)(((byte)(195)))), ((int)(((byte)(215)))));
+            this.btnToggleShare.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnToggleShare.Font = new System.Drawing.Font("微软雅黑", 9F);
+            this.btnToggleShare.Location = new System.Drawing.Point(474, 7);
+            this.btnToggleShare.Name = "btnToggleShare";
+            this.btnToggleShare.Size = new System.Drawing.Size(100, 30);
+            this.btnToggleShare.TabIndex = 7;
+            this.btnToggleShare.Text = "共享设置";
+            this.btnToggleShare.Click += new System.EventHandler(this.btnToggleShare_Click);
+            // 
             // btnRestartSpooler
             // 
             this.btnRestartSpooler.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(180)))), ((int)(((byte)(195)))), ((int)(((byte)(215)))));
             this.btnRestartSpooler.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnRestartSpooler.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnRestartSpooler.Location = new System.Drawing.Point(474, 7);
+            this.btnRestartSpooler.Location = new System.Drawing.Point(584, 7);
             this.btnRestartSpooler.Name = "btnRestartSpooler";
             this.btnRestartSpooler.Size = new System.Drawing.Size(120, 30);
             this.btnRestartSpooler.TabIndex = 4;
@@ -186,7 +202,7 @@ namespace PrinterManager.UI
             this.lblPrinterCount.AutoSize = true;
             this.lblPrinterCount.Font = new System.Drawing.Font("微软雅黑", 9F);
             this.lblPrinterCount.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(110)))), ((int)(((byte)(130)))));
-            this.lblPrinterCount.Location = new System.Drawing.Point(734, 13);
+            this.lblPrinterCount.Location = new System.Drawing.Point(844, 13);
             this.lblPrinterCount.Name = "lblPrinterCount";
             this.lblPrinterCount.Size = new System.Drawing.Size(83, 17);
             this.lblPrinterCount.TabIndex = 5;
@@ -225,6 +241,7 @@ namespace PrinterManager.UI
             // 
             this.panelDriverToolbar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(250)))), ((int)(((byte)(255)))));
             this.panelDriverToolbar.Controls.Add(this.btnRefresh2);
+            this.panelDriverToolbar.Controls.Add(this.btnInstallDriver);
             this.panelDriverToolbar.Controls.Add(this.btnDeleteDriver);
             this.panelDriverToolbar.Controls.Add(this.lblDriverCount);
             this.panelDriverToolbar.Dock = System.Windows.Forms.DockStyle.Top;
@@ -246,6 +263,21 @@ namespace PrinterManager.UI
             this.btnRefresh2.Text = "刷新";
             this.btnRefresh2.Click += new System.EventHandler(this.btnRefresh2_Click);
             // 
+            // btnInstallDriver
+            // 
+            this.btnInstallDriver.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(0)))), ((int)(((byte)(120)))), ((int)(((byte)(215)))));
+            this.btnInstallDriver.FlatAppearance.BorderSize = 0;
+            this.btnInstallDriver.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnInstallDriver.Font = new System.Drawing.Font("微软雅黑", 9F);
+            this.btnInstallDriver.ForeColor = System.Drawing.Color.White;
+            this.btnInstallDriver.Location = new System.Drawing.Point(93, 7);
+            this.btnInstallDriver.Name = "btnInstallDriver";
+            this.btnInstallDriver.Size = new System.Drawing.Size(130, 30);
+            this.btnInstallDriver.TabIndex = 3;
+            this.btnInstallDriver.Text = "安装驱动程序";
+            this.btnInstallDriver.UseVisualStyleBackColor = false;
+            this.btnInstallDriver.Click += new System.EventHandler(this.btnInstallDriver_Click);
+            // 
             // btnDeleteDriver
             // 
             this.btnDeleteDriver.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(196)))), ((int)(((byte)(43)))), ((int)(((byte)(28)))));
@@ -254,7 +286,7 @@ namespace PrinterManager.UI
             this.btnDeleteDriver.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnDeleteDriver.Font = new System.Drawing.Font("微软雅黑", 9F);
             this.btnDeleteDriver.ForeColor = System.Drawing.Color.White;
-            this.btnDeleteDriver.Location = new System.Drawing.Point(93, 7);
+            this.btnDeleteDriver.Location = new System.Drawing.Point(229, 7);
             this.btnDeleteDriver.Name = "btnDeleteDriver";
             this.btnDeleteDriver.Size = new System.Drawing.Size(130, 30);
             this.btnDeleteDriver.TabIndex = 0;
@@ -267,7 +299,7 @@ namespace PrinterManager.UI
             this.lblDriverCount.AutoSize = true;
             this.lblDriverCount.Font = new System.Drawing.Font("微软雅黑", 9F);
             this.lblDriverCount.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(110)))), ((int)(((byte)(130)))));
-            this.lblDriverCount.Location = new System.Drawing.Point(229, 14);
+            this.lblDriverCount.Location = new System.Drawing.Point(365, 14);
             this.lblDriverCount.Name = "lblDriverCount";
             this.lblDriverCount.Size = new System.Drawing.Size(71, 17);
             this.lblDriverCount.TabIndex = 1;
@@ -369,7 +401,7 @@ namespace PrinterManager.UI
             this.btnCleanPrinters.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(180)))), ((int)(((byte)(195)))), ((int)(((byte)(215)))));
             this.btnCleanPrinters.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnCleanPrinters.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnCleanPrinters.Location = new System.Drawing.Point(604, 7);
+            this.btnCleanPrinters.Location = new System.Drawing.Point(714, 7);
             this.btnCleanPrinters.Name = "btnCleanPrinters";
             this.btnCleanPrinters.Size = new System.Drawing.Size(120, 30);
             this.btnCleanPrinters.TabIndex = 6;
@@ -417,11 +449,13 @@ namespace PrinterManager.UI
         private System.Windows.Forms.Button btnAddNetwork;
         private System.Windows.Forms.Button btnDeletePrinter;
         private System.Windows.Forms.Button btnSetDefault;
+        private System.Windows.Forms.Button btnToggleShare;
         private System.Windows.Forms.Button btnRestartSpooler;
         private System.Windows.Forms.Label lblPrinterCount;
         private System.Windows.Forms.ListView lvPrinters;
         private System.Windows.Forms.Panel panelDriverToolbar;
         private System.Windows.Forms.Button btnDeleteDriver;
+        private System.Windows.Forms.Button btnInstallDriver;
         private System.Windows.Forms.Label lblDriverCount;
         private System.Windows.Forms.ListView lvDrivers;
         private System.Windows.Forms.Panel panelLogToolbar;
