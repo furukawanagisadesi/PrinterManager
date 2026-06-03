@@ -274,10 +274,9 @@ namespace PrinterManager.Core
                     info = (PrinterApiWrapper.PRINTER_INFO_2)
                         Marshal.PtrToStructure(pInfo, typeof(PrinterApiWrapper.PRINTER_INFO_2));
                 }
-                catch
+                finally
                 {
                     Marshal.FreeHGlobal(pInfo);
-                    throw;
                 }
             }
             catch
@@ -321,6 +320,7 @@ namespace PrinterManager.Core
                 }
                 finally
                 {
+                    Marshal.DestroyStructure(pInfo, typeof(PrinterApiWrapper.PRINTER_INFO_2));
                     Marshal.FreeHGlobal(pInfo);
                 }
             }
@@ -358,6 +358,7 @@ namespace PrinterManager.Core
                 }
                 finally
                 {
+                    Marshal.DestroyStructure(pInfo, typeof(PrinterApiWrapper.PRINTER_INFO_2));
                     Marshal.FreeHGlobal(pInfo);
                 }
             }
