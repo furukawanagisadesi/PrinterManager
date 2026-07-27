@@ -177,23 +177,25 @@ namespace PrinterManager.Core
         {
             try
             {
-                // 连一个外部地址（不真正发包），获取出口 IP
-                using (
-                    var s = new Socket(
-                        AddressFamily.InterNetwork,
-                        SocketType.Dgram,
-                        ProtocolType.Udp
-                    )
-                )
+                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
                 {
-                    s.Connect("8.8.8.8", 80);
-                    return ((IPEndPoint)s.LocalEndPoint).Address.ToString();
+                    if (ni.OperationalStatus != OperationalStatus.Up)
+                        continue;
+                    var ipProps = ni.GetIPProperties();
+                    foreach (var addr in ipProps.UnicastAddresses)
+                    {
+                        if (addr.Address.AddressFamily == AddressFamily.InterNetwork
+                            && !IPAddress.IsLoopback(addr.Address))
+                        {
+                            return addr.Address.ToString();
+                        }
+                    }
                 }
             }
             catch
             {
-                return "";
             }
+            return "";
         }
 
         private static bool PingHost(string host, int timeoutMs)

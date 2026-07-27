@@ -100,7 +100,7 @@ namespace PrinterManager.UI
             lvDrivers.Items.Clear();
             try
             {
-                _drivers = DriverOperations.EnumerateDrivers();
+                _drivers = DriverEnumerator.EnumerateDrivers();
                 foreach (var d in _drivers)
                 {
                     var item = new ListViewItem(d.Name);
@@ -449,7 +449,7 @@ namespace PrinterManager.UI
                     LogInfo($"开始安装驱动程序: {Path.GetFileName(infPath)}");
 
                     // 解析 INF 中的真实驱动名（从 [Manufacturer] → [Strings] 解析）
-                    string driverName = DriverOperations.ParseDriverNameFromInf(infPath);
+                    string driverName = InfParser.ParseDriverNameFromInf(infPath);
                     LogInfo($"解析驱动名称: {driverName}");
 
                     DriverOperations.InstallDriver(infPath, driverName);

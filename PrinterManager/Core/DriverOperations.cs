@@ -17,236 +17,6 @@ namespace PrinterManager.Core
     /// </summary>
     public static class DriverOperations
     {
-        /// <summary>
-        /// 进程执行结果（替代 ValueTuple）
-        /// </summary>
-        public class ProcessResult
-        {
-            public bool Success { get; }
-            public string Output { get; }
-
-            public ProcessResult(bool success, string output)
-            {
-                Success = success;
-                Output = output;
-            }
-
-            public void Deconstruct(out bool success, out string output)
-            {
-                success = Success;
-                output = Output;
-            }
-        }
-
-        // ══════════════════════════════════════════════════════════════
-        // 枚举驱动
-        // ══════════════════════════════════════════════════════════════
-
-        /// <summary>
-        /// 枚举本机已安装的所有打印机驱动（版本3和版本4）
-        /// </summary>
-        public static List<DriverInfo> EnumerateDrivers()
-        {
-            var list = new List<DriverInfo>();
-            EnumerateDriversLevel3(list);
-            EnumerateDriversLevel4(list);
-            list.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
-            return list;
-        }
-
-        private static void EnumerateDriversLevel3(List<DriverInfo> list)
-        {
-            uint needed = 0,
-                returned = 0;
-            PrinterApiWrapper.EnumPrinterDrivers(
-                null,
-                null,
-                3,
-                IntPtr.Zero,
-                0,
-                ref needed,
-                ref returned
-            );
-            if (needed == 0)
-                return;
-
-            IntPtr buf = Marshal.AllocHGlobal((int)needed);
-            try
-            {
-                if (
-                    !PrinterApiWrapper.EnumPrinterDrivers(
-                        null,
-                        null,
-                        3,
-                        buf,
-                        needed,
-                        ref needed,
-                        ref returned
-                    )
-                )
-                {
-                    int err = Marshal.GetLastWin32Error();
-                    if (err == 122) // ERROR_INSUFFICIENT_BUFFER
-                    {
-                        // 先分配新缓冲区，再释放旧缓冲区，避免分配失败导致 double-free
-                        IntPtr newBuf = Marshal.AllocHGlobal((int)needed);
-                        Marshal.FreeHGlobal(buf);
-                        buf = newBuf;
-                        if (
-                            !PrinterApiWrapper.EnumPrinterDrivers(
-                                null,
-                                null,
-                                3,
-                                buf,
-                                needed,
-                                ref needed,
-                                ref returned
-                            )
-                        )
-                            throw new Win32Exception(Marshal.GetLastWin32Error());
-                    }
-                    else
-                    {
-                        throw new Win32Exception(err);
-                    }
-                }
-
-                int structSize = Marshal.SizeOf(typeof(PrinterApiWrapper.DRIVER_INFO_3));
-                for (int i = 0; i < returned; i++)
-                {
-                    IntPtr ptr = new IntPtr(buf.ToInt64() + i * structSize);
-                    var info = (PrinterApiWrapper.DRIVER_INFO_3)
-                        Marshal.PtrToStructure(ptr, typeof(PrinterApiWrapper.DRIVER_INFO_3));
-
-                    if (
-                        !list.Exists(d =>
-                            string.Equals(d.Name, info.pName, StringComparison.OrdinalIgnoreCase)
-                            && string.Equals(
-                                d.Environment,
-                                info.pEnvironment,
-                                StringComparison.OrdinalIgnoreCase
-                            )
-                            && d.Version == info.cVersion
-                        )
-                    )
-                    {
-                        list.Add(
-                            new DriverInfo
-                            {
-                                Name = info.pName,
-                                Environment = info.pEnvironment,
-                                DriverPath = info.pDriverPath,
-                                DataFile = info.pDataFile,
-                                ConfigFile = info.pConfigFile,
-                                Version = info.cVersion,
-                            }
-                        );
-                    }
-                }
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(buf);
-            }
-        }
-
-        private static void EnumerateDriversLevel4(List<DriverInfo> list)
-        {
-            // V4 驱动（Win8.1+），旧系统不支持时静默忽略
-            uint needed = 0,
-                returned = 0;
-            PrinterApiWrapper.EnumPrinterDrivers(
-                null,
-                null,
-                4,
-                IntPtr.Zero,
-                0,
-                ref needed,
-                ref returned
-            );
-            if (needed == 0)
-                return;
-
-            IntPtr buf = Marshal.AllocHGlobal((int)needed);
-            try
-            {
-                if (
-                    !PrinterApiWrapper.EnumPrinterDrivers(
-                        null,
-                        null,
-                        4,
-                        buf,
-                        needed,
-                        ref needed,
-                        ref returned
-                    )
-                )
-                {
-                    int err = Marshal.GetLastWin32Error();
-                    if (err == 122)
-                    {
-                        // 先分配新缓冲区，再释放旧缓冲区，避免分配失败导致 double-free
-                        IntPtr newBuf = Marshal.AllocHGlobal((int)needed);
-                        Marshal.FreeHGlobal(buf);
-                        buf = newBuf;
-                        if (
-                            !PrinterApiWrapper.EnumPrinterDrivers(
-                                null,
-                                null,
-                                4,
-                                buf,
-                                needed,
-                                ref needed,
-                                ref returned
-                            )
-                        )
-                            return;
-                    }
-                    else
-                    {
-                        return;
-                    }
-                }
-
-                int structSize = Marshal.SizeOf(typeof(PrinterApiWrapper.DRIVER_INFO_4));
-                for (int i = 0; i < returned; i++)
-                {
-                    IntPtr ptr = new IntPtr(buf.ToInt64() + i * structSize);
-                    var info = (PrinterApiWrapper.DRIVER_INFO_4)
-                        Marshal.PtrToStructure(ptr, typeof(PrinterApiWrapper.DRIVER_INFO_4));
-
-                    if (
-                        !list.Exists(d =>
-                            string.Equals(d.Name, info.pName, StringComparison.OrdinalIgnoreCase)
-                            && string.Equals(
-                                d.Environment,
-                                info.pEnvironment,
-                                StringComparison.OrdinalIgnoreCase
-                            )
-                            && d.Version == info.cVersion
-                        )
-                    )
-                    {
-                        list.Add(
-                            new DriverInfo
-                            {
-                                Name = info.pName,
-                                Environment = info.pEnvironment,
-                                DriverPath = info.pDriverPath,
-                                DataFile = info.pDataFile,
-                                ConfigFile = info.pConfigFile,
-                                Version = info.cVersion,
-                            }
-                        );
-                    }
-                }
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(buf);
-            }
-        }
-
         // ══════════════════════════════════════════════════════════════
         // 删除驱动（Win32 API）
         // ══════════════════════════════════════════════════════════════
@@ -309,7 +79,7 @@ namespace PrinterManager.Core
         /// </summary>
         public static bool CheckDriverInstalled(string driverName)
         {
-            var drivers = EnumerateDrivers();
+            var drivers = DriverEnumerator.EnumerateDrivers();
             return drivers.Exists(d =>
                 string.Equals(d.Name, driverName, StringComparison.OrdinalIgnoreCase)
             );
@@ -318,12 +88,12 @@ namespace PrinterManager.Core
         /// <summary>
         /// 通过 pnputil 安装驱动包（.inf）
         /// </summary>
-        public static ProcessResult RunPnputilAddDriver(string infPath)
+        public static Helpers.ProcessResult RunPnputilAddDriver(string infPath)
         {
             if (!File.Exists(infPath))
                 throw new FileNotFoundException(string.Format("驱动包文件不存在: {0}", infPath));
 
-            return RunProcess(
+            return Helpers.ProcessRunner.Run(
                 "pnputil.exe",
                 string.Format("/add-driver \"{0}\" /install", infPath)
             );
@@ -332,162 +102,12 @@ namespace PrinterManager.Core
         /// <summary>
         /// 通过 pnputil 删除驱动包
         /// </summary>
-        public static ProcessResult RunPnputilDeleteDriver(string publishedName)
+        public static Helpers.ProcessResult RunPnputilDeleteDriver(string publishedName)
         {
-            return RunProcess(
+            return Helpers.ProcessRunner.Run(
                 "pnputil.exe",
                 string.Format("/delete-driver \"{0}\" /force", publishedName)
             );
-        }
-
-        /// <summary>
-        /// 通用进程执行辅助方法。
-        /// 用两个并行 Task 读取 stdout/stderr，彻底避免缓冲区死锁。
-        /// </summary>
-        private static ProcessResult RunProcess(string fileName, string arguments)
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            using (var process = Process.Start(psi))
-            {
-                var outputTask = Task.Factory.StartNew(() => process.StandardOutput.ReadToEnd());
-                var errorTask = Task.Factory.StartNew(() => process.StandardError.ReadToEnd());
-
-                bool exited = process.WaitForExit(60000);
-                if (!exited)
-                {
-                    process.Kill();
-                    throw new System.TimeoutException(
-                        string.Format("进程 '{0}' 执行超过 60 秒，已强制终止。", fileName)
-                    );
-                }
-
-                // 在 .NET Framework 上，WaitForExit(timeout) 不保证异步重定向管道已刷新完毕；
-                // 必须再调用一次无参 WaitForExit() 以确保 stdout/stderr 全部读取完成。
-                process.WaitForExit();
-
-                string output = outputTask.Result;
-                string error = errorTask.Result;
-
-                string fullOutput = output;
-                if (!string.IsNullOrEmpty(error))
-                    fullOutput += "\n[Error]\n" + error;
-
-                return new ProcessResult(process.ExitCode == 0, fullOutput);
-            }
-        }
-
-        // ══════════════════════════════════════════════════════════════
-        // INF 解析
-        // ══════════════════════════════════════════════════════════════
-
-        /// <summary>
-        /// 从 INF 文件解析真实的打印机驱动名称
-        /// </summary>
-        public static string ParseDriverNameFromInf(string infPath)
-        {
-            string[] lines;
-            try
-            {
-                lines = File.ReadAllLines(infPath);
-            }
-            catch
-            {
-                return Path.GetFileNameWithoutExtension(infPath);
-            }
-
-            var strings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var manufacturerSections = new List<string>();
-            string currentSection = null;
-            bool inStrings = false;
-
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string line = lines[i].Trim();
-                if (string.IsNullOrEmpty(line) || line.StartsWith(";"))
-                    continue;
-
-                if (line.StartsWith("[") && line.EndsWith("]"))
-                {
-                    currentSection = line.TrimStart('[').TrimEnd(']').Trim();
-                    inStrings = currentSection.Equals(
-                        "Strings",
-                        StringComparison.OrdinalIgnoreCase
-                    );
-                    continue;
-                }
-
-                if (inStrings && line.Contains("="))
-                {
-                    int eq = line.IndexOf("=");
-                    string k = line.Substring(0, eq).Trim().Trim('%');
-                    string v = line.Substring(eq + 1).Trim().Trim('"');
-                    if (!string.IsNullOrEmpty(k) && !string.IsNullOrEmpty(v))
-                        strings[k] = v;
-                }
-
-                if (
-                    currentSection != null
-                    && currentSection.StartsWith("Manufacturer", StringComparison.OrdinalIgnoreCase)
-                    && !inStrings
-                    && line.Contains("=")
-                )
-                {
-                    int eq = line.IndexOf("=");
-                    string right = line.Substring(eq + 1).Trim().Trim('"');
-                    if (!string.IsNullOrEmpty(right))
-                        manufacturerSections.Add(right);
-                }
-            }
-
-            foreach (var mfgSecBase in manufacturerSections)
-            {
-                currentSection = null;
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    string line = lines[i].Trim();
-                    if (string.IsNullOrEmpty(line) || line.StartsWith(";"))
-                        continue;
-                    if (line.StartsWith("[") && line.EndsWith("]"))
-                    {
-                        currentSection = line.TrimStart('[').TrimEnd(']').Trim();
-                        continue;
-                    }
-                    bool inSection =
-                        currentSection != null
-                        && (
-                            currentSection.Equals(mfgSecBase, StringComparison.OrdinalIgnoreCase)
-                            || currentSection.StartsWith(
-                                mfgSecBase + ".",
-                                StringComparison.OrdinalIgnoreCase
-                            )
-                        );
-                    if (inSection && line.Contains("="))
-                    {
-                        int eq = line.IndexOf("=");
-                        string left = line.Substring(0, eq).Trim();
-                        if (left.StartsWith("\"") && left.EndsWith("\""))
-                            return left.Trim('"');
-                        if (left.StartsWith("%") && left.EndsWith("%"))
-                        {
-                            string key = left.Trim('%');
-                            string r;
-                            if (strings.TryGetValue(key, out r))
-                                return r;
-                        }
-                    }
-                }
-            }
-
-            return Path.GetFileNameWithoutExtension(infPath);
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -520,7 +140,7 @@ namespace PrinterManager.Core
         /// </summary>
         private static void AddDriverViaApi(string driverName)
         {
-            var drivers = EnumerateDrivers();
+            var drivers = DriverEnumerator.EnumerateDrivers();
             var driver = drivers.Find(d =>
                 string.Equals(d.Name, driverName, StringComparison.OrdinalIgnoreCase)
             );
@@ -611,7 +231,7 @@ if ($driver -and $driver.InfPath) {{
 
             var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(psScript));
 
-            var result = RunProcess(
+            var result = Helpers.ProcessRunner.Run(
                 "powershell.exe",
                 string.Format("-NoProfile -ExecutionPolicy Bypass -EncodedCommand {0}", encoded)
             );
@@ -852,7 +472,7 @@ if ($driver -and $driver.InfPath) {{
 
             var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(psScript));
 
-            var psResult = RunProcess(
+            var psResult = Helpers.ProcessRunner.Run(
                 "powershell.exe",
                 string.Format("-NoProfile -ExecutionPolicy Bypass -EncodedCommand {0}", encoded)
             );
@@ -1068,8 +688,8 @@ if ($driver -and $driver.InfPath) {{
                 // 提权后重试
                 try
                 {
-                    RunProcess("takeown.exe", string.Format("/f \"{0}\" /r /d y", dirPath));
-                    RunProcess(
+                    Helpers.ProcessRunner.Run("takeown.exe", string.Format("/f \"{0}\" /r /d y", dirPath));
+                    Helpers.ProcessRunner.Run(
                         "icacls.exe",
                         string.Format("\"{0}\" /grant administrators:F /t", dirPath)
                     );
