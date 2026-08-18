@@ -17,21 +17,33 @@ namespace PrinterManager.UI
         {
             this.tabControl = new System.Windows.Forms.TabControl();
             this.tabPrinters = new System.Windows.Forms.TabPage();
+            this.splitPrinters = new System.Windows.Forms.SplitContainer();
             this.lvPrinters = new System.Windows.Forms.ListView();
             this.panelPrinterToolbar = new System.Windows.Forms.Panel();
+            this.btnCleanPrinters = new System.Windows.Forms.Button();
             this.btnRefresh = new System.Windows.Forms.Button();
             this.btnAddNetwork = new System.Windows.Forms.Button();
             this.btnDeletePrinter = new System.Windows.Forms.Button();
             this.btnSetDefault = new System.Windows.Forms.Button();
+            this.btnToggleShare = new System.Windows.Forms.Button();
             this.btnRestartSpooler = new System.Windows.Forms.Button();
             this.lblPrinterCount = new System.Windows.Forms.Label();
+            this.panelPrinterLogToolbar = new System.Windows.Forms.Panel();
+            this.btnClearPrinterLog = new System.Windows.Forms.Button();
+            this.lblPrinterLogTitle = new System.Windows.Forms.Label();
+            this.rtbPrinterLog = new System.Windows.Forms.RichTextBox();
             this.tabDrivers = new System.Windows.Forms.TabPage();
+            this.splitDrivers = new System.Windows.Forms.SplitContainer();
             this.lvDrivers = new System.Windows.Forms.ListView();
             this.panelDriverToolbar = new System.Windows.Forms.Panel();
             this.btnRefresh2 = new System.Windows.Forms.Button();
             this.btnInstallDriver = new System.Windows.Forms.Button();
             this.btnDeleteDriver = new System.Windows.Forms.Button();
             this.lblDriverCount = new System.Windows.Forms.Label();
+            this.panelDriverLogToolbar = new System.Windows.Forms.Panel();
+            this.btnClearDriverLog = new System.Windows.Forms.Button();
+            this.lblDriverLogTitle = new System.Windows.Forms.Label();
+            this.rtbDriverLog = new System.Windows.Forms.RichTextBox();
             this.tabLog = new System.Windows.Forms.TabPage();
             this.rtbLog = new System.Windows.Forms.RichTextBox();
             this.panelLogToolbar = new System.Windows.Forms.Panel();
@@ -40,13 +52,21 @@ namespace PrinterManager.UI
             this.panelStatus = new System.Windows.Forms.Panel();
             this.lblStatus = new System.Windows.Forms.Label();
             this.progressBar = new System.Windows.Forms.ProgressBar();
-            this.btnCleanPrinters = new System.Windows.Forms.Button();
-            this.btnToggleShare = new System.Windows.Forms.Button();
             this.tabControl.SuspendLayout();
             this.tabPrinters.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.splitPrinters)).BeginInit();
+            this.splitPrinters.Panel1.SuspendLayout();
+            this.splitPrinters.Panel2.SuspendLayout();
+            this.splitPrinters.SuspendLayout();
             this.panelPrinterToolbar.SuspendLayout();
+            this.panelPrinterLogToolbar.SuspendLayout();
             this.tabDrivers.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.splitDrivers)).BeginInit();
+            this.splitDrivers.Panel1.SuspendLayout();
+            this.splitDrivers.Panel2.SuspendLayout();
+            this.splitDrivers.SuspendLayout();
             this.panelDriverToolbar.SuspendLayout();
+            this.panelDriverLogToolbar.SuspendLayout();
             this.tabLog.SuspendLayout();
             this.panelLogToolbar.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainerPrinters)).BeginInit();
@@ -70,14 +90,30 @@ namespace PrinterManager.UI
             // 
             // tabPrinters
             // 
-            this.tabPrinters.Controls.Add(this.lvPrinters);
-            this.tabPrinters.Controls.Add(this.panelPrinterToolbar);
+            this.tabPrinters.Controls.Add(this.splitPrinters);
             this.tabPrinters.Location = new System.Drawing.Point(4, 28);
             this.tabPrinters.Name = "tabPrinters";
             this.tabPrinters.Padding = new System.Windows.Forms.Padding(4);
             this.tabPrinters.Size = new System.Drawing.Size(1092, 642);
             this.tabPrinters.TabIndex = 0;
             this.tabPrinters.Text = "打印机列表  ";
+            // 
+            // splitPrinters
+            // 
+            this.splitPrinters.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.splitPrinters.Location = new System.Drawing.Point(4, 4);
+            this.splitPrinters.Name = "splitPrinters";
+            this.splitPrinters.Orientation = System.Windows.Forms.Orientation.Horizontal;
+            this.splitPrinters.Panel1.Controls.Add(this.lvPrinters);
+            this.splitPrinters.Panel1.Controls.Add(this.panelPrinterToolbar);
+            this.splitPrinters.Panel1MinSize = 200;
+            this.splitPrinters.Panel2.Controls.Add(this.rtbPrinterLog);
+            this.splitPrinters.Panel2.Controls.Add(this.panelPrinterLogToolbar);
+            this.splitPrinters.Panel2MinSize = 100;
+            this.splitPrinters.Size = new System.Drawing.Size(1084, 634);
+            this.splitPrinters.SplitterDistance = 450;
+            this.splitPrinters.SplitterWidth = 6;
+            this.splitPrinters.TabIndex = 0;
             // 
             // lvPrinters
             // 
@@ -88,10 +124,10 @@ namespace PrinterManager.UI
             this.lvPrinters.FullRowSelect = true;
             this.lvPrinters.GridLines = true;
             this.lvPrinters.HideSelection = false;
-            this.lvPrinters.Location = new System.Drawing.Point(4, 48);
+            this.lvPrinters.Location = new System.Drawing.Point(0, 44);
             this.lvPrinters.MultiSelect = false;
             this.lvPrinters.Name = "lvPrinters";
-            this.lvPrinters.Size = new System.Drawing.Size(1084, 590);
+            this.lvPrinters.Size = new System.Drawing.Size(1084, 406);
             this.lvPrinters.TabIndex = 0;
             this.lvPrinters.UseCompatibleStateImageBehavior = false;
             this.lvPrinters.View = System.Windows.Forms.View.Details;
@@ -110,7 +146,7 @@ namespace PrinterManager.UI
             this.panelPrinterToolbar.Controls.Add(this.btnRestartSpooler);
             this.panelPrinterToolbar.Controls.Add(this.lblPrinterCount);
             this.panelPrinterToolbar.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panelPrinterToolbar.Location = new System.Drawing.Point(4, 4);
+            this.panelPrinterToolbar.Location = new System.Drawing.Point(0, 0);
             this.panelPrinterToolbar.Name = "panelPrinterToolbar";
             this.panelPrinterToolbar.Padding = new System.Windows.Forms.Padding(4, 6, 4, 4);
             this.panelPrinterToolbar.Size = new System.Drawing.Size(1084, 44);
@@ -208,16 +244,82 @@ namespace PrinterManager.UI
             this.lblPrinterCount.TabIndex = 5;
             this.lblPrinterCount.Text = "共 0 台打印机";
             // 
+            // panelPrinterLogToolbar
+            // 
+            this.panelPrinterLogToolbar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(250)))), ((int)(((byte)(255)))));
+            this.panelPrinterLogToolbar.Controls.Add(this.btnClearPrinterLog);
+            this.panelPrinterLogToolbar.Controls.Add(this.lblPrinterLogTitle);
+            this.panelPrinterLogToolbar.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panelPrinterLogToolbar.Location = new System.Drawing.Point(0, 0);
+            this.panelPrinterLogToolbar.Name = "panelPrinterLogToolbar";
+            this.panelPrinterLogToolbar.Padding = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            this.panelPrinterLogToolbar.Size = new System.Drawing.Size(1084, 32);
+            this.panelPrinterLogToolbar.TabIndex = 1;
+            // 
+            // btnClearPrinterLog
+            // 
+            this.btnClearPrinterLog.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(180)))), ((int)(((byte)(195)))), ((int)(((byte)(215)))));
+            this.btnClearPrinterLog.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnClearPrinterLog.Font = new System.Drawing.Font("微软雅黑", 9F);
+            this.btnClearPrinterLog.Location = new System.Drawing.Point(4, 2);
+            this.btnClearPrinterLog.Name = "btnClearPrinterLog";
+            this.btnClearPrinterLog.Size = new System.Drawing.Size(80, 26);
+            this.btnClearPrinterLog.TabIndex = 0;
+            this.btnClearPrinterLog.Text = "清空日志";
+            this.btnClearPrinterLog.Click += new System.EventHandler(this.btnClearLog_Click);
+            // 
+            // lblPrinterLogTitle
+            // 
+            this.lblPrinterLogTitle.AutoSize = true;
+            this.lblPrinterLogTitle.Font = new System.Drawing.Font("微软雅黑", 9F);
+            this.lblPrinterLogTitle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(110)))), ((int)(((byte)(130)))));
+            this.lblPrinterLogTitle.Location = new System.Drawing.Point(94, 7);
+            this.lblPrinterLogTitle.Name = "lblPrinterLogTitle";
+            this.lblPrinterLogTitle.Size = new System.Drawing.Size(55, 17);
+            this.lblPrinterLogTitle.TabIndex = 1;
+            this.lblPrinterLogTitle.Text = "操作日志";
+            // 
+            // rtbPrinterLog
+            // 
+            this.rtbPrinterLog.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(22)))), ((int)(((byte)(28)))));
+            this.rtbPrinterLog.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.rtbPrinterLog.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.rtbPrinterLog.Font = new System.Drawing.Font("Consolas", 9.5F);
+            this.rtbPrinterLog.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(220)))), ((int)(((byte)(225)))), ((int)(((byte)(235)))));
+            this.rtbPrinterLog.Location = new System.Drawing.Point(0, 32);
+            this.rtbPrinterLog.Name = "rtbPrinterLog";
+            this.rtbPrinterLog.ReadOnly = true;
+            this.rtbPrinterLog.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Vertical;
+            this.rtbPrinterLog.Size = new System.Drawing.Size(1084, 146);
+            this.rtbPrinterLog.TabIndex = 0;
+            this.rtbPrinterLog.Text = "";
+            // 
             // tabDrivers
             // 
-            this.tabDrivers.Controls.Add(this.lvDrivers);
-            this.tabDrivers.Controls.Add(this.panelDriverToolbar);
+            this.tabDrivers.Controls.Add(this.splitDrivers);
             this.tabDrivers.Location = new System.Drawing.Point(4, 28);
             this.tabDrivers.Name = "tabDrivers";
             this.tabDrivers.Padding = new System.Windows.Forms.Padding(4);
             this.tabDrivers.Size = new System.Drawing.Size(1092, 642);
             this.tabDrivers.TabIndex = 1;
             this.tabDrivers.Text = "驱动程序  ";
+            // 
+            // splitDrivers
+            // 
+            this.splitDrivers.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.splitDrivers.Location = new System.Drawing.Point(4, 4);
+            this.splitDrivers.Name = "splitDrivers";
+            this.splitDrivers.Orientation = System.Windows.Forms.Orientation.Horizontal;
+            this.splitDrivers.Panel1.Controls.Add(this.lvDrivers);
+            this.splitDrivers.Panel1.Controls.Add(this.panelDriverToolbar);
+            this.splitDrivers.Panel1MinSize = 200;
+            this.splitDrivers.Panel2.Controls.Add(this.rtbDriverLog);
+            this.splitDrivers.Panel2.Controls.Add(this.panelDriverLogToolbar);
+            this.splitDrivers.Panel2MinSize = 100;
+            this.splitDrivers.Size = new System.Drawing.Size(1084, 634);
+            this.splitDrivers.SplitterDistance = 450;
+            this.splitDrivers.SplitterWidth = 6;
+            this.splitDrivers.TabIndex = 0;
             // 
             // lvDrivers
             // 
@@ -228,10 +330,10 @@ namespace PrinterManager.UI
             this.lvDrivers.FullRowSelect = true;
             this.lvDrivers.GridLines = true;
             this.lvDrivers.HideSelection = false;
-            this.lvDrivers.Location = new System.Drawing.Point(4, 48);
+            this.lvDrivers.Location = new System.Drawing.Point(0, 44);
             this.lvDrivers.MultiSelect = false;
             this.lvDrivers.Name = "lvDrivers";
-            this.lvDrivers.Size = new System.Drawing.Size(1084, 590);
+            this.lvDrivers.Size = new System.Drawing.Size(1084, 406);
             this.lvDrivers.TabIndex = 0;
             this.lvDrivers.UseCompatibleStateImageBehavior = false;
             this.lvDrivers.View = System.Windows.Forms.View.Details;
@@ -245,7 +347,7 @@ namespace PrinterManager.UI
             this.panelDriverToolbar.Controls.Add(this.btnDeleteDriver);
             this.panelDriverToolbar.Controls.Add(this.lblDriverCount);
             this.panelDriverToolbar.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panelDriverToolbar.Location = new System.Drawing.Point(4, 4);
+            this.panelDriverToolbar.Location = new System.Drawing.Point(0, 0);
             this.panelDriverToolbar.Name = "panelDriverToolbar";
             this.panelDriverToolbar.Padding = new System.Windows.Forms.Padding(4, 6, 4, 4);
             this.panelDriverToolbar.Size = new System.Drawing.Size(1084, 44);
@@ -304,6 +406,56 @@ namespace PrinterManager.UI
             this.lblDriverCount.Size = new System.Drawing.Size(71, 17);
             this.lblDriverCount.TabIndex = 1;
             this.lblDriverCount.Text = "共 0 个驱动";
+            // 
+            // panelDriverLogToolbar
+            // 
+            this.panelDriverLogToolbar.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(250)))), ((int)(((byte)(255)))));
+            this.panelDriverLogToolbar.Controls.Add(this.btnClearDriverLog);
+            this.panelDriverLogToolbar.Controls.Add(this.lblDriverLogTitle);
+            this.panelDriverLogToolbar.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panelDriverLogToolbar.Location = new System.Drawing.Point(0, 0);
+            this.panelDriverLogToolbar.Name = "panelDriverLogToolbar";
+            this.panelDriverLogToolbar.Padding = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            this.panelDriverLogToolbar.Size = new System.Drawing.Size(1084, 32);
+            this.panelDriverLogToolbar.TabIndex = 1;
+            // 
+            // btnClearDriverLog
+            // 
+            this.btnClearDriverLog.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(180)))), ((int)(((byte)(195)))), ((int)(((byte)(215)))));
+            this.btnClearDriverLog.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnClearDriverLog.Font = new System.Drawing.Font("微软雅黑", 9F);
+            this.btnClearDriverLog.Location = new System.Drawing.Point(4, 2);
+            this.btnClearDriverLog.Name = "btnClearDriverLog";
+            this.btnClearDriverLog.Size = new System.Drawing.Size(80, 26);
+            this.btnClearDriverLog.TabIndex = 0;
+            this.btnClearDriverLog.Text = "清空日志";
+            this.btnClearDriverLog.Click += new System.EventHandler(this.btnClearLog_Click);
+            // 
+            // lblDriverLogTitle
+            // 
+            this.lblDriverLogTitle.AutoSize = true;
+            this.lblDriverLogTitle.Font = new System.Drawing.Font("微软雅黑", 9F);
+            this.lblDriverLogTitle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(110)))), ((int)(((byte)(130)))));
+            this.lblDriverLogTitle.Location = new System.Drawing.Point(94, 7);
+            this.lblDriverLogTitle.Name = "lblDriverLogTitle";
+            this.lblDriverLogTitle.Size = new System.Drawing.Size(55, 17);
+            this.lblDriverLogTitle.TabIndex = 1;
+            this.lblDriverLogTitle.Text = "操作日志";
+            // 
+            // rtbDriverLog
+            // 
+            this.rtbDriverLog.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(20)))), ((int)(((byte)(22)))), ((int)(((byte)(28)))));
+            this.rtbDriverLog.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.rtbDriverLog.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.rtbDriverLog.Font = new System.Drawing.Font("Consolas", 9.5F);
+            this.rtbDriverLog.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(220)))), ((int)(((byte)(225)))), ((int)(((byte)(235)))));
+            this.rtbDriverLog.Location = new System.Drawing.Point(0, 32);
+            this.rtbDriverLog.Name = "rtbDriverLog";
+            this.rtbDriverLog.ReadOnly = true;
+            this.rtbDriverLog.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Vertical;
+            this.rtbDriverLog.Size = new System.Drawing.Size(1084, 146);
+            this.rtbDriverLog.TabIndex = 0;
+            this.rtbDriverLog.Text = "";
             // 
             // tabLog
             // 
@@ -423,11 +575,23 @@ namespace PrinterManager.UI
             this.Load += new System.EventHandler(this.MainForm_Load);
             this.tabControl.ResumeLayout(false);
             this.tabPrinters.ResumeLayout(false);
+            this.splitPrinters.Panel1.ResumeLayout(false);
+            this.splitPrinters.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.splitPrinters)).EndInit();
+            this.splitPrinters.ResumeLayout(false);
             this.panelPrinterToolbar.ResumeLayout(false);
             this.panelPrinterToolbar.PerformLayout();
+            this.panelPrinterLogToolbar.ResumeLayout(false);
+            this.panelPrinterLogToolbar.PerformLayout();
             this.tabDrivers.ResumeLayout(false);
+            this.splitDrivers.Panel1.ResumeLayout(false);
+            this.splitDrivers.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.splitDrivers)).EndInit();
+            this.splitDrivers.ResumeLayout(false);
             this.panelDriverToolbar.ResumeLayout(false);
             this.panelDriverToolbar.PerformLayout();
+            this.panelDriverLogToolbar.ResumeLayout(false);
+            this.panelDriverLogToolbar.PerformLayout();
             this.tabLog.ResumeLayout(false);
             this.panelLogToolbar.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.splitContainerPrinters)).EndInit();
@@ -466,5 +630,15 @@ namespace PrinterManager.UI
         private System.Windows.Forms.ProgressBar progressBar;
         private System.Windows.Forms.Button btnRefresh2;
         private System.Windows.Forms.Button btnCleanPrinters;
+        private System.Windows.Forms.SplitContainer splitPrinters;
+        private System.Windows.Forms.RichTextBox rtbPrinterLog;
+        private System.Windows.Forms.Panel panelPrinterLogToolbar;
+        private System.Windows.Forms.Button btnClearPrinterLog;
+        private System.Windows.Forms.Label lblPrinterLogTitle;
+        private System.Windows.Forms.SplitContainer splitDrivers;
+        private System.Windows.Forms.RichTextBox rtbDriverLog;
+        private System.Windows.Forms.Panel panelDriverLogToolbar;
+        private System.Windows.Forms.Button btnClearDriverLog;
+        private System.Windows.Forms.Label lblDriverLogTitle;
     }
 }

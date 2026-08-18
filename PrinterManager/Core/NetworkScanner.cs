@@ -148,7 +148,7 @@ namespace PrinterManager.Core
                 {
                     ct.ThrowIfCancellationRequested();
                     if (PingHost(host, 300))
-                        foreach (var p in GetSharedPrinters(host))
+                        foreach (var p in GetSharedPrintersWithTimeout(host, ct, SmbEnumTimeoutMs))
                             found.Add(p);
 
                     int current = Interlocked.Increment(ref done);
@@ -172,6 +172,38 @@ namespace PrinterManager.Core
         }
 
         // ── 工具方法 ─────────────────────────────────────────────────────────
+
+        // SMB 枚举超时：防止个别主机的 NetShareEnum 长时间阻塞，导致扫描/取消卡顿
+        private const int SmbEnumTimeoutMs = 3000;
+
+        /// <summary>
+        /// 带超时和取消响应的共享打印机枚举。
+        /// NetShareEnum 是阻塞式 P/Invoke 无法直接取消，这里放到后台任务并限时等待：
+        /// - 超时则放弃该主机（底层任务继续在后台自然结束，不影响扫描循环）
+        /// - 取消时立即抛出 OperationCanceledException，让 Parallel.ForEach 快速退出
+        /// </summary>
+        private static List<SharedPrinterEntry> GetSharedPrintersWithTimeout(
+            string host,
+            CancellationToken ct,
+            int timeoutMs
+        )
+        {
+            var task = Task.Factory.StartNew(() => GetSharedPrinters(host));
+            try
+            {
+                if (task.Wait(timeoutMs, ct))
+                    return task.Result;
+                return new List<SharedPrinterEntry>();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                return new List<SharedPrinterEntry>();
+            }
+        }
 
         public static string GetLocalIp()
         {

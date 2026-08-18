@@ -66,6 +66,7 @@
     <Compile Include="Core\DriverOperations.cs" />
     <Compile Include="Helpers\Progress.cs" />
     <Compile Include="Helpers\ProcessRunner.cs" />
+    <Compile Include="Helpers\OperationRunner.cs" />
     <Compile Include="Core\DriverEnumerator.cs" />
     <Compile Include="Core\InfParser.cs" />
     <Compile Include="Models\PrinterInfo.cs" />
@@ -91,6 +92,7 @@
     <Compile Include="UI\ScanPrinterForm.Designer.cs">
       <DependentUpon>ScanPrinterForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="UI\WaitForm.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.manifest" />
