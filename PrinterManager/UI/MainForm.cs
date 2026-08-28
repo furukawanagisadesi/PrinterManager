@@ -604,7 +604,19 @@ namespace PrinterManager.UI
 
             var printer = (PrinterInfo)lvPrinters.SelectedItems[0].Tag;
 
-            if (printer.IsShared)
+            if (printer.IsNetwork)
+            {
+                MessageBox.Show(
+                    $"打印机 \"{printer.Name}\" 是通过网络连接的共享打印机，\n无法在本地修改其共享设置。",
+                    "提示",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+                return;
+            }
+
+            bool isCurrentlyShared = printer.IsShared && !string.IsNullOrEmpty(printer.ShareName);
+            if (isCurrentlyShared)
             {
                 // 取消共享
                 var result = MessageBox.Show(
