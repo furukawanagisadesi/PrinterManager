@@ -1,7 +1,7 @@
 # PrinterManager — 项目摘要（供 Agent 使用）
 
 > 用途：把一个 WinForms 的「打印机 / 驱动程序管理工具」的现状、结构、关键逻辑和已做的修改整理成一份可被另一个 Agent 直接消费的说明。
-> 生成时点：在完成「主界面新增“打印测试页”按钮（WMI `Win32_Printer.PrintTestPage`）、目标框架由 .NET Framework 4.0 升级到 4.8（期间先用 `Microsoft.NETFramework.ReferenceAssemblies.net40` 过渡，后改为直接使用本机 4.8 目标包并移除该包）、高 DPI（150%）界面“挤在一起”修复（`App.config` 开启 `DpiAwareness=PerMonitorV2` + 三个窗体改为 `AutoScaleMode.Dpi`、`AutoScaleDimensions=(96,96)`、修正扫描窗体表头间距、ListView 列宽按 DPI 换算）、扫描结果可选“用 IP 还是计算机名”连接（`GetServerName` + `SharedPrinterEntry.GetUncPath(useHostName)`，复选框默认勾选计算机名）」之后的状态。
+> 生成时点：在完成「主界面新增“打印测试页”按钮（WMI `Win32_Printer.PrintTestPage`）、目标框架由 .NET Framework 4.0 升级到 4.8（期间先用 `Microsoft.NETFramework.ReferenceAssemblies.net40` 过渡，后改为直接使用本机 4.8 目标包并移除该包）、高 DPI（150%）界面“挤在一起”修复（`App.config` 开启 `DpiAwareness=PerMonitorV2` + 三个窗体改为 `AutoScaleMode.Dpi`、`AutoScaleDimensions=(96,96)`、修正扫描窗体表头间距、ListView 列宽按 DPI 换算）、扫描结果可选“用 IP 还是计算机名”连接（`GetServerName` + `SharedPrinterEntry.GetUncPath(useHostName)`，复选框默认勾选计算机名）、修复打印测试页 WMI 返回值解析（`InvokeMethod` 返回 `ManagementBaseObject`，需从其 `["ReturnValue"]` 取值）」之后的状态。
 
 ## 1. 项目概览
 
@@ -94,7 +94,10 @@ PrinterManager/
 - **`PrintTestPage(string printerName)`（本次新增）**：
   - 用 WMI `Win32_Printer.PrintTestPage()` 打印**驱动自带的 Windows 原生测试页**（等同打印机属性里的“打印测试页”）。
   - WQL 名称转义：`\` → `\\`，`'` → `\'`；`SELECT * FROM Win32_Printer WHERE DeviceID='...'`。
-  - 用 `ManagementObjectSearcher` + `InvokeMethod("PrintTestPage", null, null)`；返回码非 0 抛 `InvalidOperationException`；找不到打印机抛异常。**依赖 `System.Management`（已引用）。**
+  - 用 `ManagementObjectSearcher` 查获 `Win32_Printer` 实例后调用 `InvokeMethod("PrintTestPage", null, null)`。
+  - **返回值坑（本次修复）**：该调用绑定到 `ManagementBaseObject` 重载，返回的是 **out 参数对象**，真正的返回值在其 `["ReturnValue"]`（UInt32）属性中；**不能直接 `Convert.ToUInt32(结果)`**（会抛“无法将 `ManagementBaseObject` 强制转换为 `IConvertible`”）。实现里对“`ManagementBaseObject`”与“直接返回值”两种形态都兼容，并 `Dispose` 释放。
+  - 返回码非 0 抛 `InvalidOperationException`；找不到打印机抛异常。**依赖 `System.Management`（已引用）。**
+  - 另注意：报错发生在 `InvokeMethod` **执行之后**的转换阶段，所以旧实现报失败时测试页其实可能已经送出。
 
 ### 3.7 `Core/DriverOperations.cs`（卸载流程最复杂）
 - `DeleteDriver(name, env, deleteFiles)`：用 `DeletePrinterDriverEx` + `DPD_DELETE_UNUSED_FILES`（比 `ALL_FILES` 安全）；仅当错误码 `50 (ERROR_NOT_SUPPORTED)` 才回退旧 `DeletePrinterDriver`，`1/87` 直接抛原始错误。
@@ -174,6 +177,7 @@ PrinterManager/
 ### 4.1 主界面「打印测试页」按钮
 - 需求：为选中打印机打印 Windows 原生测试页。
 - 实现：`PrinterOperations.PrintTestPage`（WMI） + `MainForm.btnPrintTestPage`（选中才启用、确认框、后台执行、成功后刷新作业数）。设计器里放在「清空打印任务」之后，`lblPrinterCount` 右移避让。
+- **后续修复（WMI 返回值）**：`InvokeMethod("PrintTestPage", null, null)` 返回 `ManagementBaseObject`（out 参数对象），返回值在 `["ReturnValue"]`。原实现直接 `Convert.ToUInt32` 在真实打印机上报“无法转换为 `IConvertible`”，已改为兼容取 `["ReturnValue"]`。见 3.6。
 
 ### 4.2 目标框架 4.0 → 4.8
 - 现象：`msbuild` 报 `MSB3644 找不到 .NETFramework,Version=v4.0 的引用程序集`；本机 `Reference Assemblies\...\v4.0` 只有中文文档、无 `mscorlib.dll`/`RedistList`，即 **4.0 目标包缺失**（安装 4.0 运行时会被系统提示“已是 OS 一部分”）。
@@ -200,7 +204,7 @@ PrinterManager/
 - **必须管理员权限**：否则大部分操作失败（manifest 已强制）。
 - **无 NuGet 依赖**；改 `.csproj` 的 `<Compile>` 列表才能增删源文件。
 - **高 DPI**：四个窗体里 `WaitForm` 仍是 `Font` 模式；其余三个为 `Dpi` 模式。若新增窗体，建议同样用 `AutoScaleMode.Dpi`+`(96,96)`；`ListView` 列宽记得 `LogicalToDeviceUnits`。
-- **打印测试页**：走 WMI `Win32_Printer.PrintTestPage`，等同系统原生测试页；需要 Spooler 正常、驱动可用。
+- **打印测试页**：走 WMI `Win32_Printer.PrintTestPage`，等同系统原生测试页；需要 Spooler 正常、驱动可用。返回值必须从 `InvokeMethod` 结果的 `["ReturnValue"]` 读取（见 4.1）。
 - **扫描计算机名**：依赖反向 DNS；`NetServerGetInfo` 常回显输入。解析失败 → UNC 回退 IP（复选框勾选也不影响连接）。
 - **网络打印机共享设置**：连接的共享打印机（`IsNetwork`）不能本地改共享，`btnToggleShare` 会提示。
 - **删除驱动会先自动删除正在使用它的打印机**（需确认）。
@@ -232,7 +236,7 @@ PrinterManager/
 MainForm 选中打印机 → btnPrintTestPage_Click（确认框）
   → OperationRunner(后台) → PrinterOperations.PrintTestPage(name)
        WMI: SELECT * FROM Win32_Printer WHERE DeviceID='<转义名>'
-            → InvokeMethod("PrintTestPage") → 返回码≠0 抛异常
+            → InvokeMethod("PrintTestPage", null, null) → 从结果取 ["ReturnValue"] → 返回码≠0 抛异常
   → 成功：LogSuccess + RefreshPrinters()（刷新作业数）
   → 失败：ShowError 写日志 + 弹窗
 ```

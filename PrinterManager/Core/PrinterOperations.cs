@@ -261,8 +261,22 @@ namespace PrinterManager.Core
                 {
                     using (printer)
                     {
+                        // InvokeMethod(string, null, null) 走 ManagementBaseObject 重载，返回的是
+                        // out 参数对象（返回值在其 "ReturnValue" 属性里）；不同重载返回类型不同，这里兼容两种。
                         object code = printer.InvokeMethod("PrintTestPage", null, null);
-                        uint result = code == null ? 0u : Convert.ToUInt32(code);
+                        var outParams = code as ManagementBaseObject;
+                        uint result;
+                        try
+                        {
+                            object ret = outParams != null ? outParams["ReturnValue"] : code;
+                            result = ret == null ? 0u : Convert.ToUInt32(ret);
+                        }
+                        finally
+                        {
+                            if (outParams != null)
+                                outParams.Dispose();
+                        }
+
                         if (result != 0)
                             throw new InvalidOperationException(
                                 string.Format("打印测试页失败，返回码：{0}。", result)
