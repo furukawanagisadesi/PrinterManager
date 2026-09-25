@@ -17,6 +17,9 @@ namespace PrinterManager.UI
         public List<SharedPrinterEntry> SelectedPrinters { get; private set; } =
             new List<SharedPrinterEntry>();
 
+        /// <summary>连接路径是否使用计算机名（默认使用 IP）</summary>
+        public bool UseHostName => chkUseHostName.Checked;
+
         public ScanPrinterForm()
         {
             InitializeComponent();
@@ -38,6 +41,11 @@ namespace PrinterManager.UI
             }
 
             SetPlaceholder(txtTarget, "如 10.220.2.0 或 10.220.2.71");
+
+            // ListView 列宽不随 AutoScale 缩放，按当前 DPI 手动换算
+            int[] widths = { 120, 150, 220, 160 };
+            for (int i = 0; i < lvResults.Columns.Count && i < widths.Length; i++)
+                lvResults.Columns[i].Width = LogicalToDeviceUnits(widths[i]);
         }
 
         private string GetPrefix(string ip) => ip.Substring(0, ip.LastIndexOf('.'));
@@ -110,6 +118,7 @@ namespace PrinterManager.UI
                     if (isSingleHost)
                     {
                         found = NetworkScanner.GetSharedPrinters(input);
+                        NetworkScanner.ResolveHostNames(found);
                         progress.Report(
                             new ScanProgress
                             {
@@ -231,7 +240,7 @@ namespace PrinterManager.UI
             {
                 var item = new ListViewItem(p.Host);
                 item.SubItems.Add(p.ShareName);
-                item.SubItems.Add(p.UncPath);
+                item.SubItems.Add(p.GetUncPath(UseHostName));
                 item.SubItems.Add(p.Comment);
                 item.Tag = p;
                 lvResults.Items.Add(item);
@@ -298,6 +307,16 @@ namespace PrinterManager.UI
         private void lvResults_ItemChecked(object sender, ItemCheckedEventArgs e)
         {
             btnInstall.Enabled = lvResults.CheckedItems.Count > 0;
+        }
+
+        private void chkUseHostName_CheckedChanged(object sender, EventArgs e)
+        {
+            // 只更新“UNC 路径”列的显示，不改动已选状态
+            foreach (ListViewItem item in lvResults.Items)
+            {
+                if (item.Tag is SharedPrinterEntry p)
+                    item.SubItems[2].Text = p.GetUncPath(UseHostName);
+            }
         }
 
         private void txtTarget_Enter(object sender, EventArgs e)

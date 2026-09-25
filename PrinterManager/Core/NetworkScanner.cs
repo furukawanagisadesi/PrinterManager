@@ -16,8 +16,20 @@ namespace PrinterManager.Core
     {
         public string Host { get; set; } // 10.220.2.5
         public string ShareName { get; set; } // HP-LaserJet
-        public string UncPath => $@"\\{Host}\{ShareName}";
+        public string HostName { get; set; } // 计算机名，解析失败时为空
         public string Comment { get; set; }
+
+        // 默认（IP）路径，保持向后兼容
+        public string UncPath => $@"\\{Host}\{ShareName}";
+
+        /// <summary>
+        /// 生成连接路径：useHostName 且已解析到计算机名时用计算机名，否则回退到 IP。
+        /// </summary>
+        public string GetUncPath(bool useHostName)
+        {
+            string server = (useHostName && !string.IsNullOrEmpty(HostName)) ? HostName : Host;
+            return $@"\\{server}\{ShareName}";
+        }
 
         public override string ToString() => UncPath;
     }
@@ -54,6 +66,18 @@ namespace PrinterManager.Core
 
         [DllImport("Netapi32.dll")]
         private static extern int NetApiBufferFree(IntPtr buffer);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SERVER_INFO_100
+        {
+            public uint sv100_platform_id;
+
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string sv100_name;
+        }
+
+        [DllImport("Netapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern int NetServerGetInfo(string servername, int level, out IntPtr bufptr);
 
         private const int MAX_PREFERRED_LENGTH = -1;
         private const int NERR_Success = 0;
@@ -116,6 +140,81 @@ namespace PrinterManager.Core
             return result;
         }
 
+        /// <summary>
+        /// 为已枚举的条目补全计算机名（按主机去重，每台主机解析一次）。
+        /// 刻意放在枚举超时之外调用，避免解析耗时导致已发现的共享被丢弃。
+        /// </summary>
+        public static void ResolveHostNames(IList<SharedPrinterEntry> entries)
+        {
+            if (entries == null || entries.Count == 0)
+                return;
+
+            var cache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in entries)
+            {
+                if (e == null || string.IsNullOrEmpty(e.Host))
+                    continue;
+
+                if (!cache.TryGetValue(e.Host, out string name))
+                {
+                    name = GetServerName(e.Host);
+                    cache[e.Host] = name;
+                }
+                e.HostName = name;
+            }
+        }
+
+        /// <summary>
+        /// 解析主机的计算机名：优先 NetServerGetInfo（复用 SMB 会话），失败回退反向 DNS。
+        /// 均失败返回空字符串（调用方回退为 IP）。
+        /// 注意：用 IP 连接时 NetServerGetInfo 常原样回显输入，因此过滤掉等于 host 的结果。
+        /// </summary>
+        public static string GetServerName(string host)
+        {
+            if (string.IsNullOrEmpty(host))
+                return "";
+
+            // 1) NetServerGetInfo：部分环境返回真实计算机名
+            IntPtr buf = IntPtr.Zero;
+            try
+            {
+                int ret = NetServerGetInfo(host, 100, out buf);
+                if (ret == NERR_Success && buf != IntPtr.Zero)
+                {
+                    var info = (SERVER_INFO_100)
+                        Marshal.PtrToStructure(buf, typeof(SERVER_INFO_100));
+                    string apiName = info.sv100_name?.TrimStart('\\');
+                    if (
+                        !string.IsNullOrEmpty(apiName)
+                        && !string.Equals(apiName, host, StringComparison.OrdinalIgnoreCase)
+                    )
+                        return apiName;
+                }
+            }
+            catch { }
+            finally
+            {
+                if (buf != IntPtr.Zero)
+                    NetApiBufferFree(buf);
+            }
+
+            // 2) 反向 DNS：取第一个标签作为计算机名（如 FLEISCH.lan → FLEISCH）
+            try
+            {
+                string dnsName = Dns.GetHostEntry(host).HostName;
+                if (!string.IsNullOrEmpty(dnsName))
+                {
+                    int dot = dnsName.IndexOf('.');
+                    string shortName = dot > 0 ? dnsName.Substring(0, dot) : dnsName;
+                    if (!string.Equals(shortName, host, StringComparison.OrdinalIgnoreCase))
+                        return shortName;
+                }
+            }
+            catch { }
+
+            return "";
+        }
+
         // ── 扫描整个 /24 子网 ────────────────────────────────────────────────
 
         /// <summary>
@@ -168,6 +267,10 @@ namespace PrinterManager.Core
             list.Sort(
                 (a, b) => string.Compare(a.UncPath, b.UncPath, StringComparison.OrdinalIgnoreCase)
             );
+
+            // 枚举完成后再解析计算机名，避免解析耗时影响上面按主机的超时控制
+            ResolveHostNames(list);
+
             return list;
         }
 

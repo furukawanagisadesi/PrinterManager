@@ -161,8 +161,8 @@ namespace PrinterManager.UI
             // 
             // AddNetworkPrinterForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.ClientSize = new System.Drawing.Size(460, 284);
             this.Controls.Add(this.lblUncPath);
             this.Controls.Add(this.txtUncPath);

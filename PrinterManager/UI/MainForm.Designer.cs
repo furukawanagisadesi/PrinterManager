@@ -21,6 +21,7 @@ namespace PrinterManager.UI
             this.lvPrinters = new System.Windows.Forms.ListView();
             this.panelPrinterToolbar = new System.Windows.Forms.Panel();
             this.btnCleanPrinters = new System.Windows.Forms.Button();
+            this.btnPrintTestPage = new System.Windows.Forms.Button();
             this.btnRefresh = new System.Windows.Forms.Button();
             this.btnAddNetwork = new System.Windows.Forms.Button();
             this.btnDeletePrinter = new System.Windows.Forms.Button();
@@ -144,6 +145,7 @@ namespace PrinterManager.UI
             this.panelPrinterToolbar.Controls.Add(this.btnSetDefault);
             this.panelPrinterToolbar.Controls.Add(this.btnToggleShare);
             this.panelPrinterToolbar.Controls.Add(this.btnRestartSpooler);
+            this.panelPrinterToolbar.Controls.Add(this.btnPrintTestPage);
             this.panelPrinterToolbar.Controls.Add(this.lblPrinterCount);
             this.panelPrinterToolbar.Dock = System.Windows.Forms.DockStyle.Top;
             this.panelPrinterToolbar.Location = new System.Drawing.Point(0, 0);
@@ -238,7 +240,7 @@ namespace PrinterManager.UI
             this.lblPrinterCount.AutoSize = true;
             this.lblPrinterCount.Font = new System.Drawing.Font("微软雅黑", 9F);
             this.lblPrinterCount.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(100)))), ((int)(((byte)(110)))), ((int)(((byte)(130)))));
-            this.lblPrinterCount.Location = new System.Drawing.Point(844, 13);
+            this.lblPrinterCount.Location = new System.Drawing.Point(974, 13);
             this.lblPrinterCount.Name = "lblPrinterCount";
             this.lblPrinterCount.Size = new System.Drawing.Size(83, 17);
             this.lblPrinterCount.TabIndex = 5;
@@ -560,10 +562,23 @@ namespace PrinterManager.UI
             this.btnCleanPrinters.Text = "清空打印任务";
             this.btnCleanPrinters.Click += new System.EventHandler(this.btnCleanPrinters_Click);
             // 
+            // btnPrintTestPage
+            // 
+            this.btnPrintTestPage.Enabled = false;
+            this.btnPrintTestPage.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(180)))), ((int)(((byte)(195)))), ((int)(((byte)(215)))));
+            this.btnPrintTestPage.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnPrintTestPage.Font = new System.Drawing.Font("微软雅黑", 9F);
+            this.btnPrintTestPage.Location = new System.Drawing.Point(844, 7);
+            this.btnPrintTestPage.Name = "btnPrintTestPage";
+            this.btnPrintTestPage.Size = new System.Drawing.Size(120, 30);
+            this.btnPrintTestPage.TabIndex = 8;
+            this.btnPrintTestPage.Text = "打印测试页";
+            this.btnPrintTestPage.Click += new System.EventHandler(this.btnPrintTestPage_Click);
+            // 
             // MainForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.ClientSize = new System.Drawing.Size(1100, 700);
             this.Controls.Add(this.tabControl);
             this.Controls.Add(this.panelStatus);
@@ -630,6 +645,7 @@ namespace PrinterManager.UI
         private System.Windows.Forms.ProgressBar progressBar;
         private System.Windows.Forms.Button btnRefresh2;
         private System.Windows.Forms.Button btnCleanPrinters;
+        private System.Windows.Forms.Button btnPrintTestPage;
         private System.Windows.Forms.SplitContainer splitPrinters;
         private System.Windows.Forms.RichTextBox rtbPrinterLog;
         private System.Windows.Forms.Panel panelPrinterLogToolbar;

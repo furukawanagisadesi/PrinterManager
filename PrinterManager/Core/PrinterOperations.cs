@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
 using PrinterManager.Models;
@@ -233,6 +234,47 @@ namespace PrinterManager.Core
             if (PrinterApiWrapper.GetDefaultPrinter(sb, ref size))
                 return sb.ToString();
             return string.Empty;
+        }
+
+        // ─── 打印测试页 ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// 打印驱动自带的 Windows 原生测试页（等同打印机属性中的“打印测试页”）。
+        /// </summary>
+        /// <param name="printerName">打印机名称</param>
+        public static void PrintTestPage(string printerName)
+        {
+            if (string.IsNullOrWhiteSpace(printerName))
+                throw new ArgumentException("打印机名称不能为空。", "printerName");
+
+            // WQL 字符串字面量中反斜杠与单引号需要转义（网络打印机名称含反斜杠）
+            string safeName = printerName.Replace("\\", "\\\\").Replace("'", "\\'");
+            string query = string.Format(
+                "SELECT * FROM Win32_Printer WHERE DeviceID='{0}'",
+                safeName
+            );
+
+            using (var searcher = new ManagementObjectSearcher(query))
+            using (var results = searcher.Get())
+            {
+                foreach (ManagementObject printer in results)
+                {
+                    using (printer)
+                    {
+                        object code = printer.InvokeMethod("PrintTestPage", null, null);
+                        uint result = code == null ? 0u : Convert.ToUInt32(code);
+                        if (result != 0)
+                            throw new InvalidOperationException(
+                                string.Format("打印测试页失败，返回码：{0}。", result)
+                            );
+                        return;
+                    }
+                }
+            }
+
+            throw new InvalidOperationException(
+                string.Format("未找到打印机 \"{0}\"。", printerName)
+            );
         }
 
         // ─── 共享设置 ───────────────────────────────────────────────────────────

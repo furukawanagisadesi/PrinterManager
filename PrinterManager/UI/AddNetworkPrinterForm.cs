@@ -92,15 +92,18 @@ namespace PrinterManager.UI
             {
                 if (dlg.ShowDialog(this) == DialogResult.OK && dlg.SelectedPrinters.Count > 0)
                 {
+                    // 按扫描对话框中“使用计算机名 / IP”的选择生成连接路径
+                    bool useHostName = dlg.UseHostName;
+
                     // 多台全部加入 UncPaths，同时把第一台显示在输入框里
                     UncPaths.Clear();
                     foreach (var p in dlg.SelectedPrinters)
-                        UncPaths.Add(p.UncPath);
+                        UncPaths.Add(p.GetUncPath(useHostName));
 
                     // 输入框显示选中的数量或第一台路径
                     if (dlg.SelectedPrinters.Count == 1)
                     {
-                        txtUncPath.Text = dlg.SelectedPrinters[0].UncPath;
+                        txtUncPath.Text = dlg.SelectedPrinters[0].GetUncPath(useHostName);
                         txtUncPath.ForeColor = System.Drawing.Color.Black;
                     }
                     else

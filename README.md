@@ -4,7 +4,7 @@
 
 **Windows 打印机与驱动程序管理工具**
 
-一个基于 .NET Framework 4.0 / WinForms 的 Windows 桌面应用程序，提供直观的图形界面来管理本地网络打印机和打印机驱动程序。**需要管理员权限运行。**
+一个基于 .NET Framework 4.8 / WinForms 的 Windows 桌面应用程序，提供直观的图形界面来管理本地网络打印机和打印机驱动程序。**需要管理员权限运行。**
 
 ---
 
@@ -52,7 +52,7 @@ PrinterManager/
 ├── PrinterManager/
 │   ├── Program.cs                         # 应用程序入口
 │   ├── app.manifest                       # 管理员权限清单
-│   ├── PrinterManager.csproj              # 项目文件 (.NET 4.0)
+│   ├── PrinterManager.csproj              # 项目文件 (.NET 4.8)
 │   ├── Core/
 │   │   ├── PrinterApiWrapper.cs           # Windows API P/Invoke 封装 (winspool.drv)
 │   │   ├── PrinterOperations.cs           # 打印机 CRUD 操作
@@ -76,7 +76,7 @@ PrinterManager/
 
 | 范畴 | 技术 |
 |------|------|
-| 运行时 | .NET Framework 4.0 |
+| 运行时 | .NET Framework 4.8 |
 | 界面 | Windows Forms (WinForms) |
 | 语言 | C# |
 | Windows API | P/Invoke → `winspool.drv`（EnumPrinters / AddPrinter / DeletePrinter / SetPrinter 等）|
@@ -89,7 +89,7 @@ PrinterManager/
 ## 系统要求
 
 - **操作系统**: Windows 7 / 8 / 10 / 11（含 Server 版本）
-- **运行时**: .NET Framework 4.0 或更高版本
+- **运行时**: .NET Framework 4.8 或更高版本
 - **权限**: **管理员权限**（安装/卸载打印机和驱动必须）
 
 > 应用程序清单 (`app.manifest`) 已配置 `requireAdministrator`，启动时会自动请求 UAC 提权。

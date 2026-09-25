@@ -30,6 +30,7 @@
             this.panelBottom = new System.Windows.Forms.Panel();
             this.btnInstall = new System.Windows.Forms.Button();
             this.btnClose = new System.Windows.Forms.Button();
+            this.chkUseHostName = new System.Windows.Forms.CheckBox();
 
             this.panelTop.SuspendLayout();
             this.panelToolbar.SuspendLayout();
@@ -38,26 +39,26 @@
 
             // panelTop
             this.panelTop.Dock = System.Windows.Forms.DockStyle.Top;
-            this.panelTop.Height = 70;
+            this.panelTop.Height = 96;
             this.panelTop.BackColor = System.Drawing.Color.FromArgb(0, 95, 184);
             this.panelTop.Controls.Add(this.lblTitle);
             this.panelTop.Controls.Add(this.lblDesc);
             this.panelTop.Controls.Add(this.lblSubnet);
 
             this.lblTitle.AutoSize = true;
-            this.lblTitle.Location = new System.Drawing.Point(16, 10);
+            this.lblTitle.Location = new System.Drawing.Point(16, 6);
             this.lblTitle.Font = new System.Drawing.Font("微软雅黑", 12f, System.Drawing.FontStyle.Bold);
             this.lblTitle.ForeColor = System.Drawing.Color.White;
             this.lblTitle.Text = "扫描局域网共享打印机";
 
             this.lblDesc.AutoSize = true;
-            this.lblDesc.Location = new System.Drawing.Point(18, 36);
+            this.lblDesc.Location = new System.Drawing.Point(18, 42);
             this.lblDesc.Font = new System.Drawing.Font("微软雅黑", 8.5f);
             this.lblDesc.ForeColor = System.Drawing.Color.FromArgb(200, 220, 240);
             this.lblDesc.Text = "输入单个 IP 扫描单台，输入 x.x.x.0 或 x.x.x 扫描整个网段";
 
             this.lblSubnet.AutoSize = true;
-            this.lblSubnet.Location = new System.Drawing.Point(18, 52);
+            this.lblSubnet.Location = new System.Drawing.Point(18, 68);
             this.lblSubnet.Font = new System.Drawing.Font("微软雅黑", 8f);
             this.lblSubnet.ForeColor = System.Drawing.Color.FromArgb(180, 210, 240);
             this.lblSubnet.Text = "本机 IP：检测中...";
@@ -134,8 +135,18 @@
             this.panelBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.panelBottom.Height = 48;
             this.panelBottom.BackColor = System.Drawing.Color.FromArgb(245, 248, 252);
+            this.panelBottom.Controls.Add(this.chkUseHostName);
             this.panelBottom.Controls.Add(this.btnInstall);
             this.panelBottom.Controls.Add(this.btnClose);
+
+            this.chkUseHostName.AutoSize = true;
+            this.chkUseHostName.Location = new System.Drawing.Point(8, 15);
+            this.chkUseHostName.Font = new System.Drawing.Font("微软雅黑", 9f);
+            this.chkUseHostName.ForeColor = System.Drawing.Color.FromArgb(60, 70, 90);
+            this.chkUseHostName.Text = "连接路径使用计算机名（取消勾选则用 IP）";
+            this.chkUseHostName.Checked = true;
+            this.chkUseHostName.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.chkUseHostName.CheckedChanged += new System.EventHandler(this.chkUseHostName_CheckedChanged);
 
             this.btnInstall.Text = "安装选中打印机";
             this.btnInstall.Location = new System.Drawing.Point(480, 10);
@@ -157,8 +168,8 @@
             this.btnClose.Click += new System.EventHandler(this.btnClose_Click);
 
             // Form
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.ClientSize = new System.Drawing.Size(730, 480);
             this.MinimumSize = new System.Drawing.Size(600, 400);
             this.Font = new System.Drawing.Font("微软雅黑", 9F);
@@ -196,5 +207,6 @@
         private System.Windows.Forms.Panel panelBottom;
         private System.Windows.Forms.Button btnInstall;
         private System.Windows.Forms.Button btnClose;
+        private System.Windows.Forms.CheckBox chkUseHostName;
     }
 }
