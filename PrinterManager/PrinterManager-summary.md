@@ -1,7 +1,7 @@
 # PrinterManager — 项目摘要（供 Agent 使用）
 
 > 用途：把一个 WinForms 的「打印机 / 驱动程序管理工具」的现状、结构、关键逻辑和已做的修改整理成一份可被另一个 Agent 直接消费的说明。
-> 生成时点：在完成「主界面新增“打印测试页”按钮（WMI `Win32_Printer.PrintTestPage`）、目标框架由 .NET Framework 4.0 升级到 4.8（期间先用 `Microsoft.NETFramework.ReferenceAssemblies.net40` 过渡，后改为直接使用本机 4.8 目标包并移除该包）、高 DPI（150%）界面“挤在一起”修复（`App.config` 开启 `DpiAwareness=PerMonitorV2` + 三个窗体改为 `AutoScaleMode.Dpi`、`AutoScaleDimensions=(96,96)`、修正扫描窗体表头间距、ListView 列宽按 DPI 换算）、扫描结果可选“用 IP 还是计算机名”连接（`GetServerName` + `SharedPrinterEntry.GetUncPath(useHostName)`，复选框默认勾选计算机名）、修复打印测试页 WMI 返回值解析（`InvokeMethod` 返回 `ManagementBaseObject`，需从其 `["ReturnValue"]` 取值）」之后的状态。
+> 生成时点：在完成「主界面新增“打印测试页”按钮（WMI `Win32_Printer.PrintTestPage`）、目标框架由 .NET Framework 4.0 升级到 4.8（期间先用 `Microsoft.NETFramework.ReferenceAssemblies.net40` 过渡，后改为直接使用本机 4.8 目标包并移除该包）、高 DPI（150%）界面“挤在一起”修复（`App.config` 开启 `DpiAwareness=PerMonitorV2` + 三个窗体改为 `AutoScaleMode.Dpi`、`AutoScaleDimensions=(96,96)`、修正扫描窗体表头间距、ListView 列宽按 DPI 换算）、扫描结果可选“用 IP 还是计算机名”连接（`GetServerName` + `SharedPrinterEntry.GetUncPath(useHostName)`，复选框默认勾选计算机名）、修复打印测试页 WMI 返回值解析（`InvokeMethod` 返回 `ManagementBaseObject`，需从其 `["ReturnValue"]` 取值）、修复 Win7（.NET 4.5.2）上的 `MissingMethodException`（用自写的 `Helpers/DpiHelper.cs` 替换 .NET 4.7 才有的 `Control.LogicalToDeviceUnits`）」之后的状态。
 
 ## 1. 项目概览
 
@@ -40,7 +40,8 @@ PrinterManager/
     │   └── ScanProgress.cs                # 扫描进度模型
     ├── Helpers/
     │   ├── ProcessRunner.cs               # 通用进程执行（双 Task 读 stdout/stderr，防死锁）
-    │   └── OperationRunner.cs             # 后台执行 + 模态转圈等待框封装
+    │   ├── OperationRunner.cs             # 后台执行 + 模态转圈等待框封装
+    │   └── DpiHelper.cs                   # DPI 换算（不依赖 .NET 4.7 的 LogicalToDeviceUnits）
     └── UI/
         ├── MainForm.cs / .Designer.cs     # 主窗口：打印机/驱动/日志三个标签页
         ├── AddNetworkPrinterForm.cs / .Designer.cs  # 添加网络打印机对话框
@@ -49,6 +50,7 @@ PrinterManager/
 ```
 
 > 注意：`Helpers/Progress.cs`（自定义 `IProgress<T>`/`Progress<T>`）**已删除**——它是 4.0 时代的变通实现，升级到 4.8 后与 `System.IProgress<T>`/`System.Progress<T>` 命名冲突；`ScanPrinterForm` 现直接使用框架类型。
+> 另外：程序实际**最低运行时为 .NET Framework 4.5**（用了 4.5 才有的 `System.Progress<T>`/`IProgress<T>` 与 `IProgress<T>` 参数）；高 DPI 逐显示器增强需 **4.7+/Win10**。为兼容较低运行时，ListView 列宽换算改用自写的 `Helpers/DpiHelper.cs`（见 3.12 / 4.5）。
 
 ## 3. 各文件职责与关键逻辑
 
@@ -140,9 +142,10 @@ PrinterManager/
 - `DriverInfo`：`Name/Environment/DriverPath/DataFile/ConfigFile/Version` + `VersionText`。
 - `ScanProgress`：`Done/Total/Host`。
 
-### 3.12 `Helpers/ProcessRunner.cs` / `Helpers/OperationRunner.cs`
+### 3.12 `Helpers/*`（`ProcessRunner` / `OperationRunner` / `DpiHelper`）
 - `ProcessRunner.Run(file, args)`：重定向 stdout/stderr，两个并行 Task 读取**防死锁**；60s 超时强杀抛 `TimeoutException`；`.NET Framework` 下超时 `WaitForExit(timeout)` 后**必须再调用无参 `WaitForExit()`** 确保管道读完。返回 `ProcessResult(Success, Output)`（含 `[Error]` 段，支持解构）。
 - `OperationRunner.Run(owner, message, work, onSuccess, onError)`：显示 `WaitForm` 模态框，后台 `Task` 执行 `work`，`ReportProgress` 回调经 `BeginInvoke` 切回 UI 更新文字；完成后关闭等待框并按 `onError`/`onSuccess` 处理。重载 `Action` ↔ `Action<ReportProgress>`。
+- `DpiHelper.LogicalToDevice(control, value)`：把逻辑单位按控件所在显示器的 DPI 换算为设备像素（`CreateGraphics().DpiX / 96`；96 DPI 原样返回，异常回退原值）。**刻意不用 .NET 4.7 才有的 `Control.LogicalToDeviceUnits`/`Control.DeviceDpi`**，以兼容 Win7 的 4.5.2（见 4.5）。`MainForm.SetupListViews`、`ScanPrinterForm_Load` 用它换算 ListView 列宽。
 - `Helpers/Progress.cs` 已删除（见第 2 节说明）。
 
 ### 3.13 `UI/MainForm.cs`（**本次改动**）
@@ -151,7 +154,7 @@ PrinterManager/
 - 日志：`LogInfo/Success/Warning/Error` → `LogThreadSafe`（必要时 `BeginInvoke` 回 UI）→ 同时写入 `rtbLog/rtbPrinterLog/rtbDriverLog`。
 - 选中联动：`lvPrinters_SelectedIndexChanged` 里按 `selected` 启用 删除/设为默认/共享设置/**打印测试页**。
 - **`btnPrintTestPage_Click`（本次新增）**：无选中提示；确认框 → `OperationRunner.Run` 调 `PrinterOperations.PrintTestPage(printer.Name)` → 成功写日志并 `RefreshPrinters()`（刷新作业数），失败 `ShowError`。
-- **`SetupListViews()` 改为在 `MainForm_Load` 中调用**（确保句柄/`DeviceDpi` 就绪），列宽由写死像素改为 `LogicalToDeviceUnits(...)`（**ListView 列宽不随 AutoScale 缩放**，须手动换算）。随后 `RefreshAll()`。
+- **`SetupListViews()` 改为在 `MainForm_Load` 中调用**（确保句柄就绪），列宽由写死像素改为 `DpiHelper.LogicalToDevice(this, ...)`（**ListView 列宽不随 AutoScale 缩放**，须手动换算）。随后 `RefreshAll()`。
 - `ConfirmAndDeleteDriver`：删驱动前若检测到有打印机在用，先自动删这些打印机。
 - 空选中/网络打印机共享等均有中文提示。
 
@@ -165,7 +168,7 @@ PrinterManager/
 - **新增复选框 `chkUseHostName`**：文字「连接路径使用计算机名（取消勾选则用 IP）」，**默认勾选**；`CheckedChanged` 只刷新「UNC 路径」列 = `p.GetUncPath(UseHostName)`。
 - 暴露 **`public bool UseHostName => chkUseHostName.Checked;`**。
 - 单机扫描分支在 `GetSharedPrinters(input)` 后调用 `NetworkScanner.ResolveHostNames(found)`；`OnScanComplete` 用 `GetUncPath(UseHostName)` 填 UNC 列。
-- `ScanPrinterForm_Load` 末尾按 DPI 换算 `lvResults` 列宽（120/150/220/160）。
+- `ScanPrinterForm_Load` 末尾用 `DpiHelper.LogicalToDevice` 按 DPI 换算 `lvResults` 列宽（120/150/220/160）。
 - `SelectedPrinters`（勾选项）传回 `AddNetworkPrinterForm`。
 
 ### 3.16 `UI/WaitForm.cs`
@@ -191,7 +194,7 @@ PrinterManager/
   - 新增 `App.config`（`DpiAwareness=PerMonitorV2`）。
   - 三个窗体（`MainForm`/`ScanPrinterForm`/`AddNetworkPrinterForm`）统一 `AutoScaleMode.Dpi` + `AutoScaleDimensions=(96,96)`：按 DPI 比例（150%→1.5×）**整体缩放布局且不放大字体**。已验证该机制：2× 基准下按钮 80×30→160×60、字体仍 9pt；`Control.Scale` 亦会缩放 Dock 面板高度（70→105）。
   - 扫描窗体表头：面板高度 70→96，标题/说明/本机 IP 三行重排，消除重叠。
-  - **ListView 列宽不随 AutoScale 缩放**：`MainForm.SetupListViews`（`LogicalToDeviceUnits` 换算）与 `ScanPrinterForm_Load` 均手动换算。
+  - **ListView 列宽不随 AutoScale 缩放**：`MainForm.SetupListViews` 与 `ScanPrinterForm_Load` 均用 `DpiHelper.LogicalToDevice` 手动换算。
 - 复现限制：开发机（opencode 会话）实测 `GetDpiForSystem()=96`，无法直接复现 150%；结论分别用「缩放机制单测」与「96 DPI 下表头无重叠的程序化检查」验证。
 
 ### 4.4 连接路径可选「IP / 计算机名」
@@ -199,11 +202,18 @@ PrinterManager/
 - 实现：`SharedPrinterEntry.HostName` + `GetUncPath(useHostName)`；`NetworkScanner.GetServerName`/`ResolveHostNames` 解析计算机名；`ScanPrinterForm` 复选框（默认计算机名）；`AddNetworkPrinterForm` 按选项生成路径。
 - 注意：`NetServerGetInfo` 用 IP 连接时不可靠（常回显 IP），实际名称主要靠**反向 DNS**；解析失败自动回退 IP。见 3.10。
 
+### 4.5 Win7（.NET 4.5.2）上的 `MissingMethodException`
+- 现象：某台 Win7 运行时报 `System.MissingMethodException: Method not found: 'Int32 System.Windows.Forms.Control.LogicalToDeviceUnits(Int32)'`，堆栈在 `MainForm.SetupListViews()`。
+- 根因：该机装的是 **.NET Framework 4.5.2**（日志 `mscorlib ... FX452RTMGDR`），而 `Control.LogicalToDeviceUnits`/`Control.DeviceDpi` 是 **.NET Framework 4.7** 才新增。4.x 为就地共享运行时，程序能启动，但 JIT 到使用缺失 API 的方法时才抛错。
+- 修复：新增 `Helpers/DpiHelper.cs`（用 `CreateGraphics().DpiX` 自行换算）替换两处 `LogicalToDeviceUnits`；`PrinterManager.csproj` 增加编译项。已确认重新构建的 `PrinterManager.exe` 不再引用任何 4.7+ 方法。
+- 部署要求：**最低 .NET Framework 4.5**（`System.Progress<T>`/`IProgress<T>` 为 4.5）；高 DPI 逐显示器增强需 **4.7+/Win10**，在 4.5.2/Win7 上仅普通 DPI 缩放（Win7 通常 100%，无影响）。
+
 ## 5. 已知行为 / 注意点
 
 - **必须管理员权限**：否则大部分操作失败（manifest 已强制）。
 - **无 NuGet 依赖**；改 `.csproj` 的 `<Compile>` 列表才能增删源文件。
-- **高 DPI**：四个窗体里 `WaitForm` 仍是 `Font` 模式；其余三个为 `Dpi` 模式。若新增窗体，建议同样用 `AutoScaleMode.Dpi`+`(96,96)`；`ListView` 列宽记得 `LogicalToDeviceUnits`。
+- **最低运行时 .NET Framework 4.5**（用了 `System.Progress<T>`/`IProgress<T>`）；高 DPI 逐显示器增强需 4.7+/Win10（见 4.5）。已移除对 4.7+ API 的依赖，可在 Win7 的 4.5.2 上运行。
+- **高 DPI**：四个窗体里 `WaitForm` 仍是 `Font` 模式；其余三个为 `Dpi` 模式。若新增窗体，建议同样用 `AutoScaleMode.Dpi`+`(96,96)`；`ListView` 列宽记得用 `DpiHelper.LogicalToDevice`（**不要用 4.7 才有的 `LogicalToDeviceUnits`**）。
 - **打印测试页**：走 WMI `Win32_Printer.PrintTestPage`，等同系统原生测试页；需要 Spooler 正常、驱动可用。返回值必须从 `InvokeMethod` 结果的 `["ReturnValue"]` 读取（见 4.1）。
 - **扫描计算机名**：依赖反向 DNS；`NetServerGetInfo` 常回显输入。解析失败 → UNC 回退 IP（复选框勾选也不影响连接）。
 - **网络打印机共享设置**：连接的共享打印机（`IsNetwork`）不能本地改共享，`btnToggleShare` 会提示。

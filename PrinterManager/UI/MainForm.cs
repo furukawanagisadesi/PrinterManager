@@ -31,20 +31,20 @@ namespace PrinterManager.UI
         private void SetupListViews()
         {
             // 打印机列表列（列宽不随 AutoScaleMode 缩放，需按当前 DPI 手动换算）
-            lvPrinters.Columns.Add("打印机名称", LogicalToDeviceUnits(220));
-            lvPrinters.Columns.Add("类型", LogicalToDeviceUnits(80));
-            lvPrinters.Columns.Add("状态", LogicalToDeviceUnits(80));
-            lvPrinters.Columns.Add("驱动程序", LogicalToDeviceUnits(180));
-            lvPrinters.Columns.Add("端口", LogicalToDeviceUnits(90));
-            lvPrinters.Columns.Add("共享名", LogicalToDeviceUnits(120));
-            lvPrinters.Columns.Add("作业数", LogicalToDeviceUnits(60));
-            lvPrinters.Columns.Add("备注", LogicalToDeviceUnits(150));
+            lvPrinters.Columns.Add("打印机名称", DpiHelper.LogicalToDevice(this, 220));
+            lvPrinters.Columns.Add("类型", DpiHelper.LogicalToDevice(this, 80));
+            lvPrinters.Columns.Add("状态", DpiHelper.LogicalToDevice(this, 80));
+            lvPrinters.Columns.Add("驱动程序", DpiHelper.LogicalToDevice(this, 180));
+            lvPrinters.Columns.Add("端口", DpiHelper.LogicalToDevice(this, 90));
+            lvPrinters.Columns.Add("共享名", DpiHelper.LogicalToDevice(this, 120));
+            lvPrinters.Columns.Add("作业数", DpiHelper.LogicalToDevice(this, 60));
+            lvPrinters.Columns.Add("备注", DpiHelper.LogicalToDevice(this, 150));
 
             // 驱动列表列
-            lvDrivers.Columns.Add("驱动名称", LogicalToDeviceUnits(260));
-            lvDrivers.Columns.Add("版本", LogicalToDeviceUnits(160));
-            lvDrivers.Columns.Add("环境", LogicalToDeviceUnits(130));
-            lvDrivers.Columns.Add("驱动文件路径", LogicalToDeviceUnits(280));
+            lvDrivers.Columns.Add("驱动名称", DpiHelper.LogicalToDevice(this, 260));
+            lvDrivers.Columns.Add("版本", DpiHelper.LogicalToDevice(this, 160));
+            lvDrivers.Columns.Add("环境", DpiHelper.LogicalToDevice(this, 130));
+            lvDrivers.Columns.Add("驱动文件路径", DpiHelper.LogicalToDevice(this, 280));
         }
 
         // ─── 刷新 ─────────────────────────────────────────────────────────────────

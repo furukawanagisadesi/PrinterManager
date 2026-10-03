@@ -45,7 +45,7 @@ namespace PrinterManager.UI
             // ListView 列宽不随 AutoScale 缩放，按当前 DPI 手动换算
             int[] widths = { 120, 150, 220, 160 };
             for (int i = 0; i < lvResults.Columns.Count && i < widths.Length; i++)
-                lvResults.Columns[i].Width = LogicalToDeviceUnits(widths[i]);
+                lvResults.Columns[i].Width = DpiHelper.LogicalToDevice(this, widths[i]);
         }
 
         private string GetPrefix(string ip) => ip.Substring(0, ip.LastIndexOf('.'));

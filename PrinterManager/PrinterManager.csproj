@@ -66,6 +66,7 @@
     <Compile Include="Core\DriverOperations.cs" />
     <Compile Include="Helpers\ProcessRunner.cs" />
     <Compile Include="Helpers\OperationRunner.cs" />
+    <Compile Include="Helpers\DpiHelper.cs" />
     <Compile Include="Core\DriverEnumerator.cs" />
     <Compile Include="Core\InfParser.cs" />
     <Compile Include="Models\PrinterInfo.cs" />
