@@ -21,7 +21,7 @@ PrinterManager/
 ├── PrinterManager.sln                     # 解决方案 (VS2022)
 ├── LICENSE                                # GPL v3
 ├── README.md                              # 项目说明（含功能/构建/使用）
-├── PrinterManager-summary.md              # 本文件
+├── AGENTS.md                              # 本文件（项目摘要，供 Agent 使用）
 └── PrinterManager/
     ├── Program.cs                         # 入口：EnableVisualStyles + Run(MainForm)
     ├── app.manifest                       # requireAdministrator + 兼容性 + DPI 感知
