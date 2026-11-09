@@ -96,18 +96,22 @@ namespace PrinterManager.UI
             progressBar.Maximum = isSingleHost ? 1 : (toSuffix - fromSuffix + 1);
             lblProgress.Text = "正在扫描...";
 
-            IProgress<ScanProgress> progress = new Progress<ScanProgress>(p =>
+            // 用 Action + BeginInvoke 代替 System.Progress<T>（后者需要 .NET 4.5+）
+            Action<ScanProgress> progress = p =>
             {
-                if (!IsHandleCreated)
+                if (!IsHandleCreated || IsDisposed)
                     return;
-                progressBar.Value = Math.Min(p.Done, progressBar.Maximum);
-                lblProgress.Text = string.Format(
-                    "进度：{0}/{1}  当前：{2}",
-                    p.Done,
-                    p.Total,
-                    p.Host
-                );
-            });
+                BeginInvoke(new Action(() =>
+                {
+                    progressBar.Value = Math.Min(p.Done, progressBar.Maximum);
+                    lblProgress.Text = string.Format(
+                        "进度：{0}/{1}  当前：{2}",
+                        p.Done,
+                        p.Total,
+                        p.Host
+                    );
+                }));
+            };
 
             var ct = _cts.Token;
             System.Threading.Tasks.Task.Factory.StartNew(() =>
@@ -119,7 +123,7 @@ namespace PrinterManager.UI
                     {
                         found = NetworkScanner.GetSharedPrinters(input);
                         NetworkScanner.ResolveHostNames(found);
-                        progress.Report(
+                        progress(
                             new ScanProgress
                             {
                                 Done = 1,

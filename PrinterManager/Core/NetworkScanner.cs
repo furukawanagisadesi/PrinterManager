@@ -220,13 +220,13 @@ namespace PrinterManager.Core
         /// <summary>
         /// 根据本机 IP 推算 /24 网段，并行 Ping + 枚举共享打印机
         /// </summary>
-        /// <param name="progress">进度回调 (已完成数, 总数)</param>
+        /// <param name="progress">进度回调；用 Action 而非 IProgress，兼容 .NET 4.0</param>
         /// <param name="ct">取消令牌</param>
         public static List<SharedPrinterEntry> ScanSubnet(
             string prefix,
             int fromSuffix,
             int toSuffix,
-            IProgress<ScanProgress> progress,
+            Action<ScanProgress> progress,
             CancellationToken ct
         )
         {
@@ -252,7 +252,7 @@ namespace PrinterManager.Core
 
                     int current = Interlocked.Increment(ref done);
                     if (progress != null)
-                        progress.Report(
+                        progress(
                             new ScanProgress
                             {
                                 Done = current,
