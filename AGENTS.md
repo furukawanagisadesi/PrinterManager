@@ -1,7 +1,7 @@
 # PrinterManager — 项目摘要（供 Agent 使用）
 
 > 用途：把一个 WinForms 的「打印机 / 驱动程序管理工具」的现状、结构、关键逻辑和已做的修改整理成一份可被另一个 Agent 直接消费的说明。
-> 生成时点：在完成「主界面新增“打印测试页”按钮（WMI `Win32_Printer.PrintTestPage`）、目标框架由 .NET Framework 4.0 升级到 4.8（期间先用 `Microsoft.NETFramework.ReferenceAssemblies.net40` 过渡，后改为直接使用本机 4.8 目标包并移除该包）、高 DPI（150%）界面“挤在一起”修复（`App.config` 开启 `DpiAwareness=PerMonitorV2` + 三个窗体改为 `AutoScaleMode.Dpi`、`AutoScaleDimensions=(96,96)`、修正扫描窗体表头间距、ListView 列宽按 DPI 换算）、扫描结果可选“用 IP 还是计算机名”连接（`GetServerName` + `SharedPrinterEntry.GetUncPath(useHostName)`，复选框默认勾选计算机名）、修复打印测试页 WMI 返回值解析（`InvokeMethod` 返回 `ManagementBaseObject`，需从其 `["ReturnValue"]` 取值）、修复 Win7（.NET 4.5.2）上的 `MissingMethodException`（用自写的 `Helpers/DpiHelper.cs` 替换 .NET 4.7 才有的 `Control.LogicalToDeviceUnits`）」之后的状态。
+> 生成时点：在完成「主界面新增“打印测试页”按钮（WMI `Win32_Printer.PrintTestPage`）、目标框架由 .NET Framework 4.0 升级到 4.8（期间先用 `Microsoft.NETFramework.ReferenceAssemblies.net40` 过渡，后改为直接使用本机 4.8 目标包并移除该包）、高 DPI（150%）界面“挤在一起”修复（`App.config` 开启 `DpiAwareness=PerMonitorV2` + 三个窗体改为 `AutoScaleMode.Dpi`、`AutoScaleDimensions=(96,96)`、修正扫描窗体表头间距、ListView 列宽按 DPI 换算）、扫描结果可选“用 IP 还是计算机名”连接（`GetServerName` + `SharedPrinterEntry.GetUncPath(useHostName)`，复选框默认勾选计算机名）、修复打印测试页 WMI 返回值解析（`InvokeMethod` 返回 `ManagementBaseObject`，需从其 `["ReturnValue"]` 取值）、修复 Win7（.NET 4.5.2）上的 `MissingMethodException`（用自写的 `Helpers/DpiHelper.cs` 替换 .NET 4.7 才有的 `Control.LogicalToDeviceUnits`）、修复 Win7（仅 .NET 4.0）上扫描局域网报 `System.Progress<T>` 类型加载失败（`Progress<T>`/`IProgress<T>` 需 4.5+，改为 `Action<ScanProgress>` 回调）」之后的状态。
 
 ## 1. 项目概览
 
@@ -49,8 +49,8 @@ PrinterManager/
         └── WaitForm.cs                    # 转圈等待框（代码构建，无 Designer）
 ```
 
-> 注意：`Helpers/Progress.cs`（自定义 `IProgress<T>`/`Progress<T>`）**已删除**——它是 4.0 时代的变通实现，升级到 4.8 后与 `System.IProgress<T>`/`System.Progress<T>` 命名冲突；`ScanPrinterForm` 现直接使用框架类型。
-> 另外：程序实际**最低运行时为 .NET Framework 4.5**（用了 4.5 才有的 `System.Progress<T>`/`IProgress<T>` 与 `IProgress<T>` 参数）；高 DPI 逐显示器增强需 **4.7+/Win10**。为兼容较低运行时，ListView 列宽换算改用自写的 `Helpers/DpiHelper.cs`（见 3.12 / 4.5）。
+> 注意：`Helpers/Progress.cs`（自定义 `IProgress<T>`/`Progress<T>`）**已删除**——它是 4.0 时代的变通实现，升级到 4.8 后与 `System.IProgress<T>`/`System.Progress<T>` 命名冲突。
+> 另外：项目**已不再使用 `System.Progress<T>`/`IProgress<T>`**（4.5+），扫描进度改为 `Action<ScanProgress>` 回调 + `BeginInvoke`，因此**最低运行时降回 .NET Framework 4.0**；高 DPI 逐显示器增强仍需 **4.7+/Win10**。ListView 列宽换算用自写的 `Helpers/DpiHelper.cs`（见 3.12 / 4.5）。
 
 ## 3. 各文件职责与关键逻辑
 
@@ -130,7 +130,7 @@ PrinterManager/
   - `UncPath`（旧）= `\\Host\ShareName`（IP 版，保留兼容）。
   - **`GetUncPath(bool useHostName)`**：`useHostName && HostName 非空` → `\\HostName\ShareName`，否则回退 `\\Host\ShareName`。
 - `GetSharedPrinters(host)`：`NetShareEnum(level 1)` 取打印机共享（过滤 `STYPE_SPECIAL`），填 `Host/ShareName/Comment`。
-- `ScanSubnet(prefix, from, to, progress, ct)`：并行（`MaxDegreeOfParallelism=32`）先 `PingHost` 再 `GetSharedPrintersWithTimeout`（`NetShareEnum` 阻塞，包到后台 Task 限时 3s，超时/取消不拖垮整体）；排序后**调用 `ResolveHostNames(list)`**。
+- `ScanSubnet(prefix, from, to, Action<ScanProgress> progress, ct)`：并行（`MaxDegreeOfParallelism=32`）先 `PingHost` 再 `GetSharedPrintersWithTimeout`（`NetShareEnum` 阻塞，包到后台 Task 限时 3s，超时/取消不拖垮整体）；排序后**调用 `ResolveHostNames(list)`**。进度回调直接在调用线程上触发（**不**做 UI 线程封送，由调用方负责，见 3.15 / 4.6）。
 - **`ResolveHostNames(IList<SharedPrinterEntry>)`（本次新增）**：按 `Host` 去重，每台解析一次名称写回 `HostName`。**刻意放在枚举超时之外**，避免解析耗时导致已发现的共享被丢弃。
 - **`GetServerName(host)`（本次新增）**：先 `NetServerGetInfo(host, 100)`（`Netapi32.dll`，读 `SERVER_INFO_100.sv100_name`）；**用 IP 连接时它常原样回显输入**，故过滤“等于 host”的结果；再回退反向 DNS `Dns.GetHostEntry(host).HostName`，并**取第一个标签**（`FLEISCH.lan` → `FLEISCH`），过滤等于 host 的结果。均失败返回 `""`（调用方回退 IP）。
   - 实测：本机 `192.168.10.220` → 反向 DNS 得 `FLEISCH.lan` → 返回 `FLEISCH`；`NetServerGetInfo` 对 IP 返回 IP（被过滤）。
@@ -163,7 +163,8 @@ PrinterManager/
 - **`btnScanLan_Click`（本次改动）**：读取 `dlg.UseHostName`，用 `p.GetUncPath(useHostName)` 生成 `UncPaths` 与输入框回显。手动输入路径不受影响。
 
 ### 3.15 `UI/ScanPrinterForm.cs`（**本次重点改动**）
-- 输入单 IP 或网段（`TryParseTarget`：三段=`x.x.x` 扫 1-254，四段末位 0=扫网段、非 0=单机），后台扫描、`btnStop` 可取消、进度条 + 文字、`SetPlaceholder` 用 `EM_SETCUEBANNER`。
+- 单个 IP 或网段输入（`TryParseTarget`：三段=`x.x.x` 扫 1-254，四段末位 0=扫网段、非 0=单机），后台扫描、`btnStop` 可取消、进度条 + 文字、`SetPlaceholder` 用 `EM_SETCUEBANNER`。
+- **进度回调（本次改动）**：`Action<ScanProgress> progress = p => BeginInvoke(...)`，替代 .NET 4.5 才有的 `Progress<T>`；用 `IsHandleCreated`/`IsDisposed` 双检防止窗体已关闭。见 4.6。
 - 结果 `ListView`（复选框）：主机 IP / 共享名 / **UNC 路径（随选项变化）** / 备注。
 - **新增复选框 `chkUseHostName`**：文字「连接路径使用计算机名（取消勾选则用 IP）」，**默认勾选**；`CheckedChanged` 只刷新「UNC 路径」列 = `p.GetUncPath(UseHostName)`。
 - 暴露 **`public bool UseHostName => chkUseHostName.Checked;`**。
@@ -185,7 +186,7 @@ PrinterManager/
 ### 4.2 目标框架 4.0 → 4.8
 - 现象：`msbuild` 报 `MSB3644 找不到 .NETFramework,Version=v4.0 的引用程序集`；本机 `Reference Assemblies\...\v4.0` 只有中文文档、无 `mscorlib.dll`/`RedistList`，即 **4.0 目标包缺失**（安装 4.0 运行时会被系统提示“已是 OS 一部分”）。
 - 处理：先用 NuGet `Microsoft.NETFramework.ReferenceAssemblies.net40` 过渡；后决定**直接升级目标到 4.8**，移除该包与 `RestoreProjectStyle`。
-- 升级副作用：自定义 `Helpers/Progress.cs` 的 `IProgress<T>`/`Progress<T>` 与系统同名类型冲突 → **删除该文件**，改用 `System.IProgress<T>`/`Progress<T>`（行为一致：构造时捕获 `SynchronizationContext`，回调 marshal 回 UI）。
+- 升级副作用：自定义 `Helpers/Progress.cs` 的 `IProgress<T>`/`Progress<T>` 与系统同名类型冲突 → **删除该文件**，改用 `System.IProgress<T>`/`Progress<T>`（行为一致：构造时捕获 `SynchronizationContext`，回调 marshal 回 UI）。**注：该依赖后来为兼容仅装 .NET 4.0 的 Win7 已移除，见 4.6。**
 - 注意：切换目标框架后需**清掉旧 `obj/`**（残留 NuGet 资产会报“项目未引用 v4.8…请重新还原”）。
 
 ### 4.3 高 DPI（150%）界面“挤在一起”（**本次根因 + 修复**）
@@ -206,13 +207,20 @@ PrinterManager/
 - 现象：某台 Win7 运行时报 `System.MissingMethodException: Method not found: 'Int32 System.Windows.Forms.Control.LogicalToDeviceUnits(Int32)'`，堆栈在 `MainForm.SetupListViews()`。
 - 根因：该机装的是 **.NET Framework 4.5.2**（日志 `mscorlib ... FX452RTMGDR`），而 `Control.LogicalToDeviceUnits`/`Control.DeviceDpi` 是 **.NET Framework 4.7** 才新增。4.x 为就地共享运行时，程序能启动，但 JIT 到使用缺失 API 的方法时才抛错。
 - 修复：新增 `Helpers/DpiHelper.cs`（用 `CreateGraphics().DpiX` 自行换算）替换两处 `LogicalToDeviceUnits`；`PrinterManager.csproj` 增加编译项。已确认重新构建的 `PrinterManager.exe` 不再引用任何 4.7+ 方法。
-- 部署要求：**最低 .NET Framework 4.5**（`System.Progress<T>`/`IProgress<T>` 为 4.5）；高 DPI 逐显示器增强需 **4.7+/Win10**，在 4.5.2/Win7 上仅普通 DPI 缩放（Win7 通常 100%，无影响）。
+- 当时的部署要求：最低 .NET Framework 4.5（`System.Progress<T>`/`IProgress<T>` 为 4.5）——**该下限已在 4.6 中降至 4.0**；高 DPI 逐显示器增强需 **4.7+/Win10**，在 4.5.2/Win7 上仅普通 DPI 缩放（Win7 通常 100%，无影响）。
+
+### 4.6 Win7（仅 .NET 4.0）扫描局域网报 `System.Progress<T>` 类型加载失败
+- 现象：Win7 上点「扫描局域网」弹出未处理异常：``Could not load type 'System.Progress`1' from assembly 'mscorlib, Version=4.0.0.0'``。
+- 根因：目标机只装了 **.NET Framework 4.0**；`System.Progress<T>`/`IProgress<T>` 是 **4.5** 新增类型，4.0 的 mscorlib 没有。报错中的 `mscorlib 4.0.0.0` **不能**证明是 4.0（4.5~4.8 的程序集版本号同为 4.0.0.0）。程序能启动、只在首次执行扫描方法时崩溃，是因为 JIT 到该方法才解析该类型。
+- 修复：`NetworkScanner.ScanSubnet` 参数 `IProgress<ScanProgress>` → `Action<ScanProgress>`；`ScanPrinterForm` 用 `Action` + `BeginInvoke` 手工把回调投递到 UI 线程（`Progress<T>` 原本自动做这件事）。
+- 验证：重新构建成功；检查生成 exe 的元数据字符串，已无 `IProgress<T>` / `Progress<T>`。
+- 部署：**最低 .NET Framework 4.0**。若将来重新引入 4.5+ API，会再次在只装 4.0 的机器上崩溃；可选把 `TargetFrameworkVersion` 降到 `v4.0` 让编译期拦截（需 VS2017+ 的 Roslyn 编译器）。
 
 ## 5. 已知行为 / 注意点
 
 - **必须管理员权限**：否则大部分操作失败（manifest 已强制）。
 - **无 NuGet 依赖**；改 `.csproj` 的 `<Compile>` 列表才能增删源文件。
-- **最低运行时 .NET Framework 4.5**（用了 `System.Progress<T>`/`IProgress<T>`）；高 DPI 逐显示器增强需 4.7+/Win10（见 4.5）。已移除对 4.7+ API 的依赖，可在 Win7 的 4.5.2 上运行。
+- **最低运行时 .NET Framework 4.0**（已移除 4.5 才有的 `System.Progress<T>`/`IProgress<T>`，见 4.6）；高 DPI 逐显示器增强需 4.7+/Win10（见 4.5）。已移除对 4.7+ API 的依赖，可在 Win7 + .NET 4.0 或 4.5.2 上运行。
 - **高 DPI**：四个窗体里 `WaitForm` 仍是 `Font` 模式；其余三个为 `Dpi` 模式。若新增窗体，建议同样用 `AutoScaleMode.Dpi`+`(96,96)`；`ListView` 列宽记得用 `DpiHelper.LogicalToDevice`（**不要用 4.7 才有的 `LogicalToDeviceUnits`**）。
 - **打印测试页**：走 WMI `Win32_Printer.PrintTestPage`，等同系统原生测试页；需要 Spooler 正常、驱动可用。返回值必须从 `InvokeMethod` 结果的 `["ReturnValue"]` 读取（见 4.1）。
 - **扫描计算机名**：依赖反向 DNS；`NetServerGetInfo` 常回显输入。解析失败 → UNC 回退 IP（复选框勾选也不影响连接）。
@@ -220,7 +228,7 @@ PrinterManager/
 - **删除驱动会先自动删除正在使用它的打印机**（需确认）。
 - **日志同步**：三个日志框（打印机页、驱动页、日志页）内容一致，`btnClearLog` 清空全部。
 - 若编译报“文件被占用”，先关闭正在运行的 `PrinterManager.exe`。
-- 工程路径：`D:\CSharp\WorkProject\PrinterManager`；GitHub：`https://github.com/furukawanagisadesi/PrinterManager.git`（分支 `main`）。
+- 工程路径：`D:\Program\CSharp\WorkProject\PrinterManager`；GitHub：`https://github.com/furukawanagisadesi/PrinterManager.git`（分支 `main`）。
 
 ## 6. 关键数据流
 
